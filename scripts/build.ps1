@@ -53,9 +53,22 @@ if (-not $SkipTests) {
 }
 if ($Package) {
     $destination = Join-Path $projectRoot 'dist\IslandDesktop'
+    # A running portable copy locks its exe and DLLs; close it for the copy and reopen it afterwards.
+    $portableExe = Join-Path $destination 'IslandDesktop.exe'
+    $running = @(Get-Process -Name IslandDesktop -ErrorAction SilentlyContinue | Where-Object { -not $_.Path -or $_.Path -eq $portableExe })
+    if ($running.Count -gt 0) {
+        Write-Host 'Закриваю запущену portable-копію на час оновлення…'
+        try { $running | Stop-Process -Force -ErrorAction Stop }
+        catch { throw 'Не вдалося закрити запущений Island Desktop (можливо, він запущений від адміністратора). Закрийте його через трей і повторіть.' }
+        $running | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue
+    }
     & $cmake --install $buildDir --prefix $destination
     if ($LASTEXITCODE -ne 0) { throw 'Помилка підготовки portable-збірки.' }
-    Write-Host "Portable: $destination\IslandDesktop.exe"
+    Write-Host "Portable: $portableExe"
+    if ($running.Count -gt 0) {
+        Start-Process -FilePath $portableExe -WorkingDirectory $destination -WindowStyle Hidden
+        Write-Host 'Оновлену копію запущено знову.'
+    }
 } else {
     Write-Host "Готово: $buildDir\IslandDesktop.exe"
     Write-Host 'Для запуску: .\scripts\run.ps1'
