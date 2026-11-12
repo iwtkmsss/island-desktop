@@ -40,17 +40,21 @@ Window {
     property real shellHeight: model.expanded ? expandedHeight : 50 + interaction.proximity * 1.5
     property real wavePhase: 0
     readonly property bool flowing: mediaSection && audio.enabled && audio.active && !model.reducedMotion && visible && !interaction.suppressed
-    // Artwork glow: only the outline is tinted; themes stay black/white.
+    // Artwork glow: only the outline is tinted; themes stay black/white. The glow
+    // is always light: a dark or grey outline would merge with the windows behind
+    // the island. Grey or black-and-white artwork falls back to a neutral light tone.
+    readonly property bool accentUsable: media.hasAccent && media.accentColor.hslHue >= 0
     readonly property color glowAdapted: {
+        if (!accentUsable) return colors.light ? Qt.hsla(0, 0, 0.66, 1) : Qt.hsla(0, 0, 0.90, 1)
         const c = media.accentColor
-        const sat = Math.min(0.90, Math.max(0.45, c.hslSaturation))
-        return Qt.hsla(c.hslHue, sat, colors.light ? 0.46 : 0.62, 1)
+        const sat = Math.min(0.90, Math.max(0.50, c.hslSaturation))
+        return Qt.hsla(c.hslHue, sat, colors.light ? 0.55 : 0.74, 1)
     }
-    readonly property bool glowActive: mediaSection && media.available && media.hasAccent && model.artworkGlow
-        && model.eventTitle.length === 0 && !interaction.suppressed && !model.settingsOpen && media.accentColor.hslHue >= 0
-    onGlowAdaptedChanged: if (media.hasAccent && media.accentColor.hslHue >= 0) glowTint = glowAdapted
-    Component.onCompleted: if (media.hasAccent && media.accentColor.hslHue >= 0) glowTint = glowAdapted
-    property color glowTint: "#000000"
+    readonly property bool glowActive: mediaSection && media.available && model.artworkGlow
+        && model.eventTitle.length === 0 && !interaction.suppressed && !model.settingsOpen
+    onGlowAdaptedChanged: glowTint = glowAdapted
+    Component.onCompleted: glowTint = glowAdapted
+    property color glowTint: "#e6e6e6"
     Behavior on glowTint { ColorAnimation { duration: root.model.reducedMotion ? 0 : 600 } }
     property real glowLevel: glowActive ? 1 : 0
     Behavior on glowLevel { NumberAnimation { duration: root.model.reducedMotion ? 0 : 450; easing.type: Easing.OutCubic } }
