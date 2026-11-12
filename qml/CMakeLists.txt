@@ -1,11 +1,20 @@
 # Keep the QML target beside its QML files: Qt's import scanner recursively
 # scans SOURCE_DIR. The project root also contains the local Qt SDK and artifacts.
+# Shared controller interfaces live in src/platform; each OS provides the
+# implementations in its own folder.
+if(WIN32)
+    set(island_platform_dir "${PROJECT_SOURCE_DIR}/src/platform/windows")
+else()
+    message(FATAL_ERROR "No platform backend for ${CMAKE_SYSTEM_NAME} yet: add src/platform/linux.")
+endif()
 qt_add_executable(IslandDesktop WIN32
-    ../src/main.cpp ../src/mediacontroller.cpp ../src/mediacontroller.h
-    ../src/shellcontroller.cpp ../src/shellcontroller.h
-    ../src/volumecontroller.cpp ../src/volumecontroller.h
-    ../src/audiocontroller.cpp ../src/audiocontroller.h
-    ../src/monitorcontroller.cpp ../src/monitorcontroller.h ../src/monitorselection.h)
+    ../src/main.cpp
+    ../src/platform/mediacontroller.h ../src/platform/shellcontroller.h
+    ../src/platform/volumecontroller.h ../src/platform/audiocontroller.h
+    "${island_platform_dir}/mediacontroller.cpp" "${island_platform_dir}/shellcontroller.cpp"
+    "${island_platform_dir}/volumecontroller.cpp" "${island_platform_dir}/audiocontroller.cpp"
+    ../src/core/monitorcontroller.cpp ../src/core/monitorcontroller.h ../src/core/monitorselection.h)
+target_include_directories(IslandDesktop PRIVATE "${PROJECT_SOURCE_DIR}/src/platform")
 set_target_properties(IslandDesktop PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}")
 target_link_libraries(IslandDesktop PRIVATE island_core Qt6::Quick Qt6::QuickControls2 Qt6::Widgets Qt6::Network)
 set(island_qml_files)
@@ -17,7 +26,7 @@ endforeach()
 qt_add_qml_module(IslandDesktop
     URI Island VERSION 1.0
     OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/Island"
-    SOURCES ../src/islandsurface.cpp ../src/islandsurface.h
+    SOURCES ../src/core/islandsurface.cpp ../src/core/islandsurface.h
     QML_FILES ${island_qml_files})
 if(MSVC)
     target_compile_definitions(IslandDesktop PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)

@@ -8,10 +8,10 @@ find_package(Qt6 6.8 REQUIRED COMPONENTS Quick QuickControls2 Widgets Network)
 qt_standard_project_setup(REQUIRES 6.8)
 
 add_library(island_core STATIC
-    src/appstate.cpp src/appstate.h
-    src/countdown.h
+    src/core/appstate.cpp src/core/appstate.h
+    src/core/countdown.h
 )
-target_include_directories(island_core PUBLIC src)
+target_include_directories(island_core PUBLIC src/core)
 target_link_libraries(island_core PUBLIC Qt6::Core)
 
 add_subdirectory(qml)
@@ -34,7 +34,7 @@ if(BUILD_TESTING)
     foreach(suite volume_event audioanalysis)
         qt_add_executable(${suite}_tests tests/${suite}_test.cpp)
         set_target_properties(${suite}_tests PROPERTIES WIN32_EXECUTABLE FALSE)
-        target_include_directories(${suite}_tests PRIVATE src)
+        target_include_directories(${suite}_tests PRIVATE src/core)
         target_link_libraries(${suite}_tests PRIVATE Qt6::Core Qt6::Test)
         if(MSVC)
             target_compile_options(${suite}_tests PRIVATE /utf-8)
@@ -42,15 +42,15 @@ if(BUILD_TESTING)
         add_test(NAME island_${suite} COMMAND ${suite}_tests -o ${suite}-results.txt,txt)
     endforeach()
     add_executable(shellinteraction_tests tests/shellinteraction_test.cpp)
-    target_include_directories(shellinteraction_tests PRIVATE src)
+    target_include_directories(shellinteraction_tests PRIVATE src/core)
     if(MSVC)
         target_compile_options(shellinteraction_tests PRIVATE /utf-8)
     endif()
     add_test(NAME island_shellinteraction COMMAND shellinteraction_tests)
-    qt_add_executable(monitor_tests tests/monitor_test.cpp src/monitorcontroller.cpp
-        src/monitorcontroller.h src/monitorselection.h)
+    qt_add_executable(monitor_tests tests/monitor_test.cpp src/core/monitorcontroller.cpp
+        src/core/monitorcontroller.h src/core/monitorselection.h)
     set_target_properties(monitor_tests PROPERTIES WIN32_EXECUTABLE FALSE)
-    target_include_directories(monitor_tests PRIVATE src)
+    target_include_directories(monitor_tests PRIVATE src/core)
     target_link_libraries(monitor_tests PRIVATE Qt6::Gui Qt6::Test)
     if(MSVC)
         target_compile_options(monitor_tests PRIVATE /W4 /utf-8)
