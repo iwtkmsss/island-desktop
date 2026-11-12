@@ -1,4 +1,5 @@
 #pragma once
+#include <QColor>
 #include <QElapsedTimer>
 #include <QImage>
 #include <QMutex>
@@ -16,6 +17,7 @@ struct MediaSnapshot {
     double rate = 1;
     QVariantList sources;
     QImage artwork;
+    QColor accent; // Dominant artwork colour, computed on the worker with the artwork.
 };
 Q_DECLARE_METATYPE(MediaSnapshot)
 
@@ -28,6 +30,8 @@ class MediaController final : public QObject {
     Q_PROPERTY(QString album READ album NOTIFY changed)
     Q_PROPERTY(QString sourceName READ sourceName NOTIFY changed)
     Q_PROPERTY(QString artworkUrl READ artworkUrl NOTIFY changed)
+    Q_PROPERTY(QColor accentColor READ accentColor NOTIFY accentChanged)
+    Q_PROPERTY(bool hasAccent READ hasAccent NOTIFY accentChanged)
     Q_PROPERTY(QString error READ error NOTIFY changed)
     Q_PROPERTY(bool canToggle READ canToggle NOTIFY changed)
     Q_PROPERTY(bool canNext READ canNext NOTIFY changed)
@@ -49,6 +53,8 @@ public:
     QString album() const { return snapshot_.album; }
     QString sourceName() const { return snapshot_.sourceName; }
     QString artworkUrl() const { return artworkUrl_; }
+    QColor accentColor() const { return snapshot_.accent; }
+    bool hasAccent() const { return snapshot_.accent.isValid(); }
     QString error() const { return commandError_.isEmpty() ? snapshot_.error : commandError_; }
     bool canToggle() const { return snapshot_.canToggle; }
     bool canNext() const { return snapshot_.canNext; }
@@ -69,6 +75,7 @@ public:
 signals:
     void changed();
     void positionChanged();
+    void accentChanged();
     void refreshRequested(QString preferred, quint64 generation);
     void commandRequested(QString source, QString action, qint64 position, quint64 generation);
 private:

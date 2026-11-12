@@ -40,6 +40,20 @@ Window {
     property real shellHeight: model.expanded ? expandedHeight : 50 + interaction.proximity * 1.5
     property real wavePhase: 0
     readonly property bool flowing: mediaSection && audio.enabled && audio.active && !model.reducedMotion && visible && !interaction.suppressed
+    // Artwork glow: only the outline is tinted; themes stay black/white.
+    readonly property color glowAdapted: {
+        const c = media.accentColor
+        const sat = Math.min(0.90, Math.max(0.45, c.hslSaturation))
+        return Qt.hsla(c.hslHue, sat, colors.light ? 0.46 : 0.62, 1)
+    }
+    readonly property bool glowActive: mediaSection && media.available && media.hasAccent && model.artworkGlow
+        && model.eventTitle.length === 0 && !interaction.suppressed && !model.settingsOpen && media.accentColor.hslHue >= 0
+    onGlowAdaptedChanged: if (media.hasAccent && media.accentColor.hslHue >= 0) glowTint = glowAdapted
+    Component.onCompleted: if (media.hasAccent && media.accentColor.hslHue >= 0) glowTint = glowAdapted
+    property color glowTint: "#000000"
+    Behavior on glowTint { ColorAnimation { duration: root.model.reducedMotion ? 0 : 600 } }
+    property real glowLevel: glowActive ? 1 : 0
+    Behavior on glowLevel { NumberAnimation { duration: root.model.reducedMotion ? 0 : 450; easing.type: Easing.OutCubic } }
     Binding {
         target: root.audio; property: "enabled"
         value: root.visible && !root.interaction.suppressed && !root.model.reducedMotion
@@ -100,10 +114,13 @@ Window {
             phase: root.wavePhase
             wave: root.flowing ? Math.min(7, 1 + root.audio.level * 6) : 0
             bands: root.audio.bands
+            glowColor: root.glowTint
+            glowStrength: root.glowLevel * (root.flowing ? 0.75 + 0.25 * Math.min(1, root.audio.level * 1.6) : 0.85)
             layer.enabled: true
             layer.effect: MultiEffect {
-                shadowEnabled: true; shadowColor: "#000000"
-                shadowOpacity: root.colors.light ? 0.17 : 0.42
+                shadowEnabled: true
+                shadowColor: Qt.tint("#000000", Qt.rgba(root.glowTint.r, root.glowTint.g, root.glowTint.b, 0.55 * root.glowLevel))
+                shadowOpacity: (root.colors.light ? 0.17 : 0.42) + 0.18 * root.glowLevel
                 shadowBlur: 0.7; shadowVerticalOffset: 7
             }
         }

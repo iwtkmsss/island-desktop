@@ -1,4 +1,5 @@
 #include "mediacontroller.h"
+#include "accentcolor.h"
 #include "borrowed/mediatimeline.h"
 #include <QBuffer>
 #include <QFileInfo>
@@ -196,7 +197,7 @@ private:
             }
             const auto key = snapshot.sourceId + QChar(0x1f) + snapshot.title + QChar(0x1f) + snapshot.artist + QChar(0x1f) + snapshot.album;
             snapshot.positionMs = timeline_.accept(snapshot.positionMs, snapshot.durationMs, snapshot.playing, snapshot.rate, key, clock_.elapsed());
-            if (key != artworkKey_) { artworkKey_ = key; artwork_ = {}; artRetry_.invalidate(); }
+            if (key != artworkKey_) { artworkKey_ = key; artwork_ = {}; artworkAccent_ = {}; artRetry_.invalidate(); }
             if (artwork_.isNull() && (!artRetry_.isValid() || artRetry_.elapsed() > 5000)) {
                 artRetry_.start();
                 try {
@@ -218,6 +219,7 @@ private:
                                     if (sizeHint.isValid() && sizeHint.width() <= 8192 && sizeHint.height() <= 8192) {
                                         decoder.setScaledSize(sizeHint.scaled(512, 512, Qt::KeepAspectRatio));
                                         artwork_ = decoder.read();
+                                        artworkAccent_ = accentFromImage(artwork_); // Worker thread, once per thumbnail.
                                     }
                                 }
                             }
@@ -226,6 +228,7 @@ private:
                 } catch (...) {} // A missing/invalid cover must not hide the actual track.
             }
             snapshot.artwork = artwork_;
+            snapshot.accent = artwork_.isNull() ? QColor() : artworkAccent_;
         } catch (...) {
             snapshot = unavailable();
             manager_ = nullptr; // Reconnect after a player or media service disconnects.
@@ -237,6 +240,7 @@ private:
     }
     QString preferred_, artworkKey_;
     QImage artwork_;
+    QColor artworkAccent_;
     QElapsedTimer artRetry_;
     QElapsedTimer clock_;
     MediaTimeline timeline_;
@@ -286,6 +290,7 @@ void MediaController::apply(quint64 generation, MediaSnapshot snapshot) {
     if (generation != generation_) return;
     sourcePending_ = false;
     const bool artChanged = snapshot.artwork.cacheKey() != snapshot_.artwork.cacheKey();
+    const bool accentDiffers = snapshot.accent != snapshot_.accent;
     snapshot_ = std::move(snapshot);
     receivedAt_.restart();
     if (artChanged) {
@@ -297,6 +302,7 @@ void MediaController::apply(quint64 generation, MediaSnapshot snapshot) {
         if (!positionTicker_.isActive()) positionTicker_.start();
     } else positionTicker_.stop();
     emit changed(); emit positionChanged();
+    if (accentDiffers) emit accentChanged();
 }
 void MediaController::selectSource(const QString &source) {
     if (source == preferredSource_) return;
@@ -306,6 +312,7 @@ void MediaController::selectSource(const QString &source) {
     // Both shell sizes must stop showing the old source immediately. Keep the
     // chooser's options while the worker resolves the new preferred session.
     const auto sources = snapshot_.sources;
+    const bool hadAccent = snapshot_.accent.isValid();
     snapshot_ = {};
     snapshot_.sources = sources;
     {
@@ -317,6 +324,7 @@ void MediaController::selectSource(const QString &source) {
     receivedAt_.restart();
     emit changed();
     emit positionChanged();
+    if (hadAccent) emit accentChanged();
     emit refreshRequested(source, generation_);
 }
 void MediaController::command(const QString &action, qint64 position) {

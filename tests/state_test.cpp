@@ -254,6 +254,18 @@ private slots:
         QCOMPARE(restored.timerState(), "idle");
         QVERIFY(!restored.expanded());
     }
+    void artworkGlowDefaultsOnAndPersists() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("settings.ini");
+        {
+            AppState state(path);
+            QVERIFY(state.artworkGlow());
+            state.setArtworkGlow(false);
+            QVERIFY(!state.artworkGlow());
+        }
+        AppState restored(path);
+        QVERIFY(!restored.artworkGlow());
+    }
     void unknownSettingsFallBackToUsableDefaults() {
         QTemporaryDir dir;
         const auto path = dir.filePath("settings.ini");

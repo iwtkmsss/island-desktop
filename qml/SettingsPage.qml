@@ -11,7 +11,8 @@ Item {
     required property QtObject startup
     required property QtObject hotkeys
     // Visible height stays as before the "Система" group; the rest scrolls.
-    implicitHeight: monitorRow.y + monitorRow.height
+    // Equals the old monitorRow.y + monitorRow.height: the glow row's height plus gap is subtracted.
+    implicitHeight: monitorRow.y + monitorRow.height - (glowRow.implicitHeight + 18)
 
     function reveal(item) {
         const top = item.mapToItem(content, 0, 0).y, bottom = top + item.height + 6
@@ -95,8 +96,35 @@ Item {
             }
         }
         RowLayout {
+            id: glowRow
+            y: motionRow.y + motionRow.implicitHeight + 18; width: parent.width
+            Column {
+                Layout.fillWidth: true; spacing: 5
+                Text { text: "Світіння з обкладинки"; color: page.colors.text; font.pixelSize: 13 }
+                Text { text: "Контур у кольорі треку під час музики"; color: page.colors.muted; font.pixelSize: 11 }
+            }
+            Switch {
+                id: glowSwitch
+                checked: page.model.artworkGlow
+                Accessible.name: "Світіння з обкладинки"
+                onToggled: page.model.artworkGlow = checked
+                indicator: Rectangle {
+                    x: glowSwitch.leftPadding; y: (glowSwitch.height - height) / 2
+                    width: 38; height: 22; radius: 11
+                    color: glowSwitch.checked ? page.colors.text : page.colors.raised
+                    border.color: glowSwitch.visualFocus ? page.colors.text : page.colors.line
+                    border.width: glowSwitch.visualFocus ? 2 : 1
+                    Rectangle {
+                        x: glowSwitch.checked ? 19 : 3; y: 3
+                        width: 16; height: 16; radius: 8
+                        color: glowSwitch.checked ? page.colors.inverse : page.colors.secondary
+                    }
+                }
+            }
+        }
+        RowLayout {
             id: playerRow
-            y: motionRow.y + motionRow.implicitHeight + 18
+            y: glowRow.y + glowRow.implicitHeight + 18
             width: parent.width; height: 34; spacing: 16
             Text { text: "Музичний плеєр"; color: page.colors.text; font.pixelSize: 13; Layout.fillWidth: true }
             ComboBox {

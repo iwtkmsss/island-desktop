@@ -8,6 +8,19 @@ IslandSurface::IslandSurface(QQuickItem *parent) : QQuickPaintedItem(parent) {
     setAntialiasing(true);
     connect(this, &IslandSurface::appearanceChanged, this, [this] { update(); });
 }
+void IslandSurface::setGlowColor(const QColor &color) {
+    if (glowColor_ == color) return;
+    glowColor_ = color;
+    emit glowChanged();
+    update();
+}
+void IslandSurface::setGlowStrength(qreal strength) {
+    const qreal clamped = std::isfinite(strength) ? std::clamp(strength, 0.0, 1.0) : 0.0;
+    if (glowStrength_ == clamped) return;
+    glowStrength_ = clamped;
+    emit glowChanged();
+    update();
+}
 void IslandSurface::paint(QPainter *painter) {
     const QRectF body(8, 8, width() - 16, height() - 16);
     if (body.isEmpty()) return;
@@ -65,4 +78,15 @@ void IslandSurface::paint(QPainter *painter) {
     painter->restore();
     auto outline = inkColor; outline.setAlphaF(0.12 + 0.09 * std::clamp(proximity, 0.0, 1.0));
     painter->setPen(QPen(outline, 0.8)); painter->setBrush(Qt::NoBrush); painter->drawPath(path);
+    if (glowStrength_ > 0 && glowColor_.isValid()) {
+        // The item keeps an 8 px margin and the pointer pushes the contour out by
+        // up to 5.5 px, leaving ~2.5 px: a 5 px soft pass (2.5 px each side) fits.
+        auto soft = glowColor_; soft.setAlphaF(0.22 * glowStrength_);
+        auto crisp = glowColor_; crisp.setAlphaF(0.85 * glowStrength_);
+        painter->setBrush(Qt::NoBrush);
+        painter->setPen(QPen(soft, 5.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter->drawPath(path);
+        painter->setPen(QPen(crisp, 1.4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter->drawPath(path);
+    }
 }
