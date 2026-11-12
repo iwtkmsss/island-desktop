@@ -17,11 +17,12 @@ private slots:
         state.showVolumeEvent(42, false, 10);
         QCOMPARE(state.eventKind(), "volume");
         QCOMPARE(state.eventVolume(), 42);
-        QCOMPARE(state.section(), "music");
+        QCOMPARE(state.section(), "media");
         state.showVolumeEvent(51, true, 10);
         QVERIFY(state.eventMuted());
+        QCOMPARE(state.eventIcon(), "speaker-off");
         QTRY_VERIFY(state.eventTitle().isEmpty());
-        QCOMPARE(state.section(), "music");
+        QCOMPARE(state.section(), "media");
         QVERIFY(state.eventKind().isEmpty());
     }
     void volumeDoesNotReplaceTimerCompletion() {
@@ -32,10 +33,90 @@ private slots:
         state.showVolumeEvent(90, false);
         QCOMPARE(state.eventTitle(), "Час вийшов");
         QCOMPARE(state.eventKind(), "notice");
-        QCOMPARE(state.section(), "timer");
+        QCOMPARE(state.section(), "time");
+        QCOMPARE(state.timeView(), "timer");
         state.dismissEvent();
+        QVERIFY(state.eventTitle().isEmpty());
         state.showVolumeEvent(140, false);
         QCOMPARE(state.eventVolume(), 100);
+    }
+    void timerCompletionReplacesVolumeEventAndVolumeDoesNotReturn() {
+        QTemporaryDir dir;
+        AppState state(dir.filePath("settings.ini"));
+        state.showVolumeEvent(30, false);
+        QCOMPARE(state.eventKind(), "volume");
+        IslandEvent done;
+        done.kind = "timer";
+        done.title = "Час вийшов";
+        done.icon = "check";
+        done.priority = 100;
+        done.durationMs = 8000;
+        done.coalesceKey = "timer";
+        state.postEvent(done);
+        QCOMPARE(state.eventKind(), "timer");
+        QCOMPARE(state.pendingEvents(), 0);
+        state.dismissEvent();
+        QVERIFY(state.eventKind().isEmpty());
+    }
+    void queuedNoticeShowsAfterTimerEventIsDismissed() {
+        QTemporaryDir dir;
+        AppState state(dir.filePath("settings.ini"));
+        IslandEvent done;
+        done.kind = "timer";
+        done.title = "Час вийшов";
+        done.priority = 100;
+        done.durationMs = 8000;
+        state.postEvent(done);
+        state.showTemporaryEvent("Notice");
+        QCOMPARE(state.eventKind(), "timer");
+        QCOMPARE(state.pendingEvents(), 1);
+        QSignalSpy spy(&state, &AppState::eventChanged);
+        state.dismissEvent();
+        QCOMPARE(state.eventKind(), "notice");
+        QCOMPARE(state.eventTitle(), "Notice");
+        QCOMPARE(state.pendingEvents(), 0);
+        QVERIFY(spy.count() >= 1);
+    }
+    void resetTimerKeepsUnrelatedNotice() {
+        QTemporaryDir dir;
+        AppState state(dir.filePath("settings.ini"));
+        state.showTemporaryEvent("Notice");
+        state.resetTimer();
+        QCOMPARE(state.eventTitle(), "Notice");
+        IslandEvent done;
+        done.kind = "timer";
+        done.title = "Час вийшов";
+        done.priority = 100;
+        state.postEvent(done);
+        state.resetTimer();
+        QCOMPARE(state.eventKind(), "notice");
+    }
+    void legacySavedSectionIsMigrated() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("settings.ini");
+        { QSettings file(path, QSettings::IniFormat);
+          file.setValue("ui/section", "timer"); }
+        AppState state(path);
+        QCOMPARE(state.section(), "time");
+        QCOMPARE(state.timeView(), "timer");
+        { QSettings file(path, QSettings::IniFormat);
+          file.setValue("ui/section", "volume"); }
+        AppState other(path);
+        QCOMPARE(other.section(), "media");
+    }
+    void timeViewPersistsAndRejectsInvalidValues() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("settings.ini");
+        {
+            AppState state(path);
+            QCOMPARE(state.timeView(), "clock");
+            state.setTimeView("timer");
+            state.setTimeView("bogus");
+            QCOMPARE(state.timeView(), "timer");
+        }
+        AppState restored(path);
+        QCOMPARE(restored.timeView(), "timer");
+        QCOMPARE(restored.section(), "time");
     }
     void soundSectionPersistsWithoutPersistingFlyouts() {
         QTemporaryDir dir;
@@ -46,7 +127,7 @@ private slots:
             state.showVolumeEvent(50, true);
         }
         AppState restored(path);
-        QCOMPARE(restored.section(), "volume");
+        QCOMPARE(restored.section(), "media");
         QVERIFY(restored.eventTitle().isEmpty());
         QVERIFY(restored.eventKind().isEmpty());
     }
@@ -140,30 +221,32 @@ private slots:
         state.setSection("timer");
         state.setExpanded(true);
         state.setExpanded(false);
-        QCOMPARE(state.section(), "timer");
+        QCOMPARE(state.section(), "time");
+        QCOMPARE(state.timeView(), "timer");
         state.showTemporaryEvent("Event");
-        QCOMPARE(state.section(), "timer");
+        QCOMPARE(state.section(), "time");
         state.dismissEvent();
-        QCOMPARE(state.section(), "timer");
+        QCOMPARE(state.section(), "time");
         state.setSettingsOpen(true);
         QVERIFY(state.expanded());
         state.setExpanded(false);
         QVERIFY(!state.settingsOpen());
-        QCOMPARE(state.section(), "timer");
+        QCOMPARE(state.section(), "time");
+        QCOMPARE(state.timeView(), "timer");
     }
     void preferencesSurviveRestart() {
         QTemporaryDir dir;
         const auto path = dir.filePath("settings.ini");
         {
             AppState state(path);
-            state.setSection("music");
+            state.setSection("media");
             state.setTheme("light");
             state.setReducedMotion(true);
             state.setTimerMinutes(15);
             state.toggleTimer();
         }
         AppState restored(path);
-        QCOMPARE(restored.section(), "music");
+        QCOMPARE(restored.section(), "media");
         QCOMPARE(restored.theme(), "light");
         QVERIFY(restored.reducedMotion());
         QCOMPARE(restored.timerMinutes(), 15);
@@ -179,12 +262,12 @@ private slots:
           file.setValue("ui/theme", "purple");
           file.setValue("timer/minutes", -42); }
         AppState state(path);
-        QCOMPARE(state.section(), "clock");
+        QCOMPARE(state.section(), "time");
         QCOMPARE(state.theme(), "dark");
         QCOMPARE(state.timerMinutes(), 25);
         state.setSection("unknown");
         state.setTheme("unknown");
-        QCOMPARE(state.section(), "clock");
+        QCOMPARE(state.section(), "time");
         QCOMPARE(state.theme(), "dark");
     }
     void eventExpiresWithoutChangingSelection() {
@@ -193,7 +276,7 @@ private slots:
         state.setSection("music");
         state.showTemporaryEvent("Event", 10);
         QTRY_VERIFY(state.eventTitle().isEmpty());
-        QCOMPARE(state.section(), "music");
+        QCOMPARE(state.section(), "media");
     }
 };
 QTEST_GUILESS_MAIN(StateTest)

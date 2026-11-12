@@ -136,5 +136,32 @@ Item {
             selected: true
             onClicked: page.media.selectSource("")
         }
+        Column {
+            id: volumeBlock
+            width: parent.width; spacing: 8
+            Text {
+                width: parent.width; horizontalAlignment: Text.AlignHCenter; textFormat: Text.PlainText; elide: Text.ElideRight
+                visible: page.volume.available
+                text: page.volume.deviceName || "Аудіовихід Windows"
+                color: page.colors.secondary; font.pixelSize: 12
+            }
+            Text {
+                width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
+                visible: !page.volume.available
+                text: page.volume.error || "Немає аудіовиходу Windows. Підключіть навушники або динаміки."
+                color: page.colors.secondary; font.pixelSize: 12
+            }
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter; spacing: 10
+                SoundSlider { colors: page.colors; volume: page.volume; width: volumeBlock.width - 24 - 44 - 10; height: 28; enabled: page.volume.available }
+                ActionButton {
+                    colors: page.colors; enabled: page.volume.available; selected: page.volume.muted
+                    iconName: page.soundOff ? "speaker-off" : "speaker"
+                    hint: !page.volume.available ? "Немає аудіовиходу Windows"
+                        : page.volume.muted ? "Увімкнути звук Windows" : "Вимкнути звук Windows"
+                    onClicked: page.volume.toggleMute()
+                }
+            }
+        }
     }
 }

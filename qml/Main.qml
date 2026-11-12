@@ -18,24 +18,22 @@ Window {
     flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
     readonly property IslandColors colors: IslandColors { light: root.model.theme === "light" }
     readonly property int motionDuration: model.reducedMotion ? 0 : 380
-    readonly property bool music: model.section === "music"
-    readonly property bool sound: model.section === "volume"
+    readonly property bool mediaSection: model.section === "media"
+    readonly property bool timerView: model.section === "time" && model.timeView === "timer"
     readonly property bool volumeEvent: model.eventKind === "volume" && model.eventTitle.length > 0
-    readonly property real compactWidth: model.eventTitle.length > 0 ? 268 : music ? 312 : 238
+    readonly property real compactWidth: model.eventTitle.length > 0 ? 268 : mediaSection ? 312 : 238
     property real shellWidth: model.expanded ? Math.min(520, Screen.desktopAvailableWidth - 40)
                                            : compactWidth - interaction.proximity * 5
     readonly property Item activePage: model.settingsOpen ? settingsPage
-        : model.section === "clock" ? clockPage
-        : model.section === "timer" ? timerPage
-        : music ? musicPage : volumePage
+        : model.section === "time" ? timePage : musicPage
     readonly property real expandedHeight: 24 + 58 + activePage.implicitHeight + 24 + 2
     property real shellHeight: model.expanded ? expandedHeight : 50 + interaction.proximity * 1.5
     property real wavePhase: 0
-    readonly property bool flowing: (music || sound) && audio.enabled && audio.active && !model.reducedMotion && visible && !interaction.suppressed
+    readonly property bool flowing: mediaSection && audio.enabled && audio.active && !model.reducedMotion && visible && !interaction.suppressed
     Binding {
         target: root.audio; property: "enabled"
         value: root.visible && !root.interaction.suppressed && !root.model.reducedMotion
-            && (root.music || root.sound) && !root.model.settingsOpen
+            && root.mediaSection && !root.model.settingsOpen
             && root.volume.available && !root.volume.muted && root.volume.volume > 0
     }
     // Fixed native frame, as in the supplied mod: the window is never resized
@@ -69,10 +67,8 @@ Window {
         running: root.flowing
     }
     Shortcut { sequence: "Escape"; onActivated: root.interaction.close() }
-    Shortcut { sequence: "Ctrl+1"; onActivated: root.model.section = "clock" }
-    Shortcut { sequence: "Ctrl+2"; onActivated: root.model.section = "timer" }
-    Shortcut { sequence: "Ctrl+3"; onActivated: root.model.section = "music" }
-    Shortcut { sequence: "Ctrl+4"; onActivated: root.model.section = "volume" }
+    Shortcut { sequence: "Ctrl+1"; onActivated: root.model.section = "time" }
+    Shortcut { sequence: "Ctrl+2"; onActivated: root.model.section = "media" }
 
     Item {
         id: shell
@@ -114,15 +110,15 @@ Window {
                     spacing: 10
                     anchors.fill: parent; anchors.leftMargin: 18; anchors.rightMargin: 18
                     Image {
-                        visible: root.music && root.media.artworkUrl.length > 0 && root.model.eventTitle.length === 0
+                        visible: root.mediaSection && root.media.artworkUrl.length > 0 && root.model.eventTitle.length === 0
                         source: root.media.artworkUrl; sourceSize: Qt.size(64, 64)
                         fillMode: Image.PreserveAspectCrop
                         Layout.preferredWidth: 28; Layout.preferredHeight: 28
                     }
                     LineIcon {
-                        visible: !(root.music && root.media.artworkUrl.length > 0) || root.model.eventTitle.length > 0
-                        name: root.volumeEvent ? (root.model.eventMuted ? "speaker-off" : "speaker")
-                            : root.model.eventTitle.length > 0 ? "check" : root.sound ? (root.volume.muted || !root.volume.available ? "speaker-off" : "speaker") : root.model.section
+                        visible: !(root.mediaSection && root.media.artworkUrl.length > 0) || root.model.eventTitle.length > 0
+                        name: root.model.eventTitle.length > 0 ? (root.model.eventIcon || "check")
+                            : root.mediaSection ? "music" : root.model.timeView === "timer" ? "timer" : "clock"
                         color: root.colors.text; Layout.preferredWidth: 19; Layout.preferredHeight: 19
                     }
                     Column {
@@ -130,23 +126,21 @@ Window {
                         Text {
                             width: parent.width
                             text: root.model.eventTitle.length > 0 ? root.model.eventTitle
-                                : root.model.section === "clock" ? root.model.clockTime
-                                : root.model.section === "timer" ? root.model.timerText
-                                : root.sound ? (root.volume.available ? (root.volume.muted ? "Без звуку" : root.volume.volume + "%") : "Немає аудіовиходу")
+                                : !root.mediaSection ? (root.model.timeView === "timer" ? root.model.timerText : root.model.clockTime)
                                 : root.media.available ? (root.media.title || "Без назви") : root.media.busy ? "Підключення плеєра…" : "Музика"
                             color: root.colors.text; font.pixelSize: 13; font.weight: Font.DemiBold
                             textFormat: Text.PlainText
                             elide: Text.ElideRight
                         }
                         Text {
-                            visible: root.music && root.media.available && root.model.eventTitle.length === 0
+                            visible: root.mediaSection && root.media.available && root.model.eventTitle.length === 0
                             width: parent.width; text: root.media.artist || root.media.sourceName
                             textFormat: Text.PlainText
                             color: root.colors.secondary; font.pixelSize: 11; elide: Text.ElideRight
                         }
                     }
                     ActionButton {
-                        visible: root.music && root.media.available && root.model.eventTitle.length === 0
+                        visible: root.mediaSection && root.media.available && root.model.eventTitle.length === 0
                         colors: root.colors
                         iconName: root.media.playing ? "pause" : "play"
                         hint: root.media.playing ? "Призупинити" : "Відтворити"
@@ -155,8 +149,8 @@ Window {
                         Layout.preferredWidth: 26; Layout.preferredHeight: 26
                     }
                     Text {
-                        visible: !root.music && root.model.eventTitle.length === 0 && (!root.sound || root.volume.available)
-                        text: root.sound ? "Гучність" : root.model.section === "clock" ? root.model.clockWeekdayShort
+                        visible: !root.mediaSection && root.model.eventTitle.length === 0
+                        text: root.model.timeView !== "timer" ? root.model.clockWeekdayShort
                             : root.model.timerState === "running" ? "Відлік" : root.model.timerState === "paused" ? "Пауза" : root.model.timerState === "finished" ? "Готово" : "Таймер"
                         color: root.colors.secondary; font.pixelSize: 11
                     }
@@ -174,10 +168,10 @@ Window {
                     id: header
                     width: parent.width; spacing: 3
                     Repeater {
-                        model: [{ key: "clock", label: "Годинник" }, { key: "timer", label: "Таймер" }, { key: "music", label: "Музика" }, { key: "volume", label: "Звук" }]
+                        model: [{ key: "time", label: "Час", icon: "clock" }, { key: "media", label: "Медіа", icon: "music" }]
                         ActionButton {
                             required property var modelData
-                            colors: root.colors; text: modelData.label; iconName: modelData.key
+                            colors: root.colors; text: modelData.label; iconName: modelData.icon
                             implicitWidth: contentItem.implicitWidth + 22
                             selected: root.model.section === modelData.key && !root.model.settingsOpen
                             onClicked: root.model.section = modelData.key
@@ -200,10 +194,8 @@ Window {
                 Item {
                     id: pages
                     x: 0; y: 58; width: parent.width; height: root.activePage.implicitHeight
-                    ClockPage { id: clockPage; anchors.fill: parent; colors: root.colors; model: root.model; visible: root.activePage === clockPage }
-                    TimerPage { id: timerPage; anchors.fill: parent; colors: root.colors; model: root.model; visible: root.activePage === timerPage }
+                    TimePage { id: timePage; anchors.fill: parent; colors: root.colors; model: root.model; visible: root.activePage === timePage }
                     MusicPage { id: musicPage; anchors.fill: parent; colors: root.colors; media: root.media; model: root.model; audio: root.audio; volume: root.volume; visible: root.activePage === musicPage }
-                    VolumePage { id: volumePage; anchors.fill: parent; colors: root.colors; model: root.model; volume: root.volume; audio: root.audio; visible: root.activePage === volumePage }
                     SettingsPage { id: settingsPage; anchors.fill: parent; colors: root.colors; model: root.model; media: root.media; monitors: root.monitors; visible: root.activePage === settingsPage }
                 }
             }
@@ -211,7 +203,7 @@ Window {
                 x: 20; y: parent.height - 7
                 width: (parent.width - 40) * root.model.timerProgress
                 height: 2; radius: 1; color: root.colors.secondary
-                visible: !root.model.expanded && root.model.eventTitle.length === 0 && root.model.section === "timer" && root.model.timerState !== "idle"
+                visible: !root.model.expanded && root.model.eventTitle.length === 0 && root.timerView && root.model.timerState !== "idle"
             }
             Rectangle {
                 x: 22; y: parent.height - 7

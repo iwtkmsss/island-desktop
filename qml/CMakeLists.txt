@@ -18,7 +18,7 @@ target_include_directories(IslandDesktop PRIVATE "${PROJECT_SOURCE_DIR}/src/plat
 set_target_properties(IslandDesktop PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}")
 target_link_libraries(IslandDesktop PRIVATE island_core Qt6::Quick Qt6::QuickControls2 Qt6::Widgets Qt6::Network)
 set(island_qml_files)
-foreach(name Main IslandColors LineIcon ActionButton PlaybackIndicator ClockPage TimerPage MusicPage SettingsPage VolumePage SoundSlider AudioMeter)
+foreach(name Main IslandColors LineIcon ActionButton PlaybackIndicator TimePage ClockPage TimerPage MusicPage SettingsPage SoundSlider AudioMeter)
     set(qml_file "${PROJECT_SOURCE_DIR}/qml/${name}.qml")
     set_source_files_properties("${qml_file}" PROPERTIES QT_RESOURCE_ALIAS "${name}.qml")
     list(APPEND island_qml_files "${qml_file}")

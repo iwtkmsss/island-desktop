@@ -1,6 +1,7 @@
 #pragma once
 
 #include "countdown.h"
+#include "eventqueue.h"
 #include <QDateTime>
 #include <QElapsedTimer>
 #include <QObject>
@@ -27,6 +28,9 @@ class AppState final : public QObject {
     Q_PROPERTY(QString eventKind READ eventKind NOTIFY eventChanged)
     Q_PROPERTY(int eventVolume READ eventVolume NOTIFY eventChanged)
     Q_PROPERTY(bool eventMuted READ eventMuted NOTIFY eventChanged)
+    Q_PROPERTY(QString eventIcon READ eventIcon NOTIFY eventChanged)
+    Q_PROPERTY(int pendingEvents READ pendingEvents NOTIFY eventChanged)
+    Q_PROPERTY(QString timeView READ timeView WRITE setTimeView NOTIFY timeViewChanged)
 
 public:
     explicit AppState(const QString &settingsFile, QObject *parent = nullptr);
@@ -44,12 +48,17 @@ public:
     QString timerState() const;
     int timerMinutes() const { return static_cast<int>(countdown_.duration() / 60000); }
     double timerProgress() const;
-    QString eventTitle() const { return eventTitle_; }
-    QString eventKind() const { return eventKind_; }
-    int eventVolume() const { return eventVolume_; }
-    bool eventMuted() const { return eventMuted_; }
+    QString eventTitle() const { const auto *e = events_.current(); return e ? e->title : QString(); }
+    QString eventKind() const { const auto *e = events_.current(); return e ? e->kind : QString(); }
+    QString eventIcon() const { const auto *e = events_.current(); return e ? e->icon : QString(); }
+    int eventVolume() const { const auto *e = events_.current(); return e ? qBound(0, e->level, 100) : 0; }
+    bool eventMuted() const { const auto *e = events_.current(); return e && e->muted; }
+    int pendingEvents() const { return events_.pending(); }
+    QString timeView() const { return timeView_; }
 
     void setSection(const QString &section);
+    void setTimeView(const QString &view);
+    void postEvent(const IslandEvent &event);
     void setTheme(const QString &theme);
     void setReducedMotion(bool enabled);
     void setExpanded(bool expanded);
@@ -64,6 +73,7 @@ public:
 
 signals:
     void sectionChanged();
+    void timeViewChanged();
     void themeChanged();
     void reducedMotionChanged();
     void expandedChanged();
@@ -78,7 +88,11 @@ private:
     void tick();
     void updateTicker();
     QSettings settings_;
-    QString section_ = "clock";
+    void removeTimerEvents();
+    void postTimerFinished();
+    void applyEventChange(bool currentChanged, int pendingBefore);
+    QString section_ = "time";
+    QString timeView_ = "clock";
     QString theme_ = "dark";
     bool reducedMotion_ = false;
     bool expanded_ = false;
@@ -89,9 +103,6 @@ private:
     QTimer activityTicker_;
     QTimer eventExpiry_;
     Countdown countdown_;
-    QString eventTitle_;
-    QString eventKind_;
-    int eventVolume_ = 0;
-    bool eventMuted_ = false;
+    EventQueue events_;
 };
 

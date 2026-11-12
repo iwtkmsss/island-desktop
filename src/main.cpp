@@ -74,7 +74,7 @@ int main(int argc, char *argv[]) {
     parser.addOption({"settings", "Use a separate settings file (development).", "file"});
     parser.addOption({"expanded", "Open the expanded panel."});
     parser.addOption({"pin", "Keep the expanded panel open."});
-    parser.addOption({"section", "Open clock, timer, music or volume.", "id"});
+    parser.addOption({"section", "Open time or media (legacy: clock, timer, music, volume).", "id"});
     parser.addOption({"theme", "Use dark or light theme.", "theme"});
     parser.addOption({"smoke-test", "Load QML and exit automatically."});
     parser.addOption({"inspect-ui", "Expose a normal taskbar window for UI inspection (development)."});
@@ -122,7 +122,7 @@ int main(int argc, char *argv[]) {
     if (parser.isSet("pin")) interaction.setPinned(true);
     QObject::connect(&volume, &VolumeController::volumeEvent, &state, [&](int value, bool muted) {
         // The expanded sound/music pages already show their live controls.
-        if (!state.expanded() || (state.section() != "volume" && state.section() != "music") || state.settingsOpen())
+        if (!state.expanded() || state.section() != "media" || state.settingsOpen())
             state.showVolumeEvent(value, muted);
     });
 
