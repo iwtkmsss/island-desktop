@@ -22,7 +22,10 @@ void IslandSurface::setGlowStrength(qreal strength) {
     update();
 }
 void IslandSurface::paint(QPainter *painter) {
-    const QRectF body(8, 8, width() - 16, height() - 16);
+    // Paint margin around the contour: room for the pointer push, the audio
+    // hills and the glow stroke. Main.qml anchors the item with the same value.
+    constexpr qreal margin = 14;
+    const QRectF body(margin, margin, width() - 2 * margin, height() - 2 * margin);
     if (body.isEmpty()) return;
     QPainterPath base;
     const qreal cornerRadius = std::clamp(radius, 0.0, std::min(body.width(), body.height()) / 2);
@@ -37,7 +40,7 @@ void IslandSurface::paint(QPainter *painter) {
     for (int i = bandCount; i < static_cast<int>(smoothedBands_.size()); ++i) smoothedBands_[i] = 0;
     QPainterPath path;
     constexpr int samples = 200;
-    const QPointF pointer(pointerX + 8, pointerY + 8);
+    const QPointF pointer(pointerX + margin, pointerY + margin);
     for (int i = 0; i <= samples; ++i) {
         QPointF p = base.pointAtPercent(static_cast<qreal>(i) / samples);
         const auto toward = pointer - p;
@@ -62,11 +65,14 @@ void IslandSurface::paint(QPainter *painter) {
                 const double weight = (1 - std::cos((bin - lo) * std::numbers::pi)) / 2;
                 magnitude = smoothedBands_[lo] * (1 - weight) + smoothedBands_[hi] * weight;
             }
-            // Hills only ever bulge outwards (down); a slow drift keeps them alive
-            // without the edge dipping into the panel. Capped to stay inside the
-            // item's 8 px paint margin together with the glow stroke.
-            const double drift = 0.82 + 0.18 * std::sin(u * 3 * std::numbers::pi + phase);
-            p.ry() += std::min(5.0, wave * envelope * magnitude * drift);
+            // Hills only ever bulge outwards (down) and follow the spectrum. Loud
+            // music keeps every band high, so the bands are contrasted (power > 1)
+            // to keep separate hills instead of one flat bulge. A travelling ripple,
+            // always positive, adds motion without dipping into the panel. Capped
+            // to stay inside the paint margin together with the glow stroke.
+            const double shaped = std::pow(magnitude, 1.7);
+            const double ripple = 0.72 + 0.28 * std::sin(u * 6 * std::numbers::pi + phase);
+            p.ry() += std::min(9.0, wave * envelope * shaped * ripple);
         }
         if (i == 0) path.moveTo(p); else path.lineTo(p);
     }
@@ -91,8 +97,6 @@ void IslandSurface::paint(QPainter *painter) {
     auto outline = inkColor; outline.setAlphaF(0.12 + 0.09 * std::clamp(proximity, 0.0, 1.0));
     painter->setPen(QPen(outline, 0.8)); painter->setBrush(Qt::NoBrush); painter->drawPath(path);
     if (glowStrength_ > 0 && glowColor_.isValid()) {
-        // The item keeps an 8 px margin and the pointer pushes the contour out by
-        // up to 5.5 px, leaving ~2.5 px: a 5 px soft pass (2.5 px each side) fits.
         auto soft = glowColor_; soft.setAlphaF(0.22 * glowStrength_);
         auto crisp = glowColor_; crisp.setAlphaF(0.85 * glowStrength_);
         painter->setBrush(Qt::NoBrush);

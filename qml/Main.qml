@@ -109,13 +109,13 @@ Window {
         visible: !root.interaction.suppressed
         x: root.shellX; y: 16; width: root.shellWidth; height: root.shellHeight
         IslandSurface {
-            anchors.fill: parent; anchors.margins: -8
+            anchors.fill: parent; anchors.margins: -14 // paint margin, same value as in IslandSurface
             surfaceColor: root.colors.surface; inkColor: root.colors.text
             radius: root.model.expanded ? 30 : 25
             pointerX: root.interaction.pointerX; pointerY: root.interaction.pointerY
             proximity: root.interaction.proximity
             phase: root.wavePhase
-            wave: root.flowing ? Math.min(7, 1 + root.audio.level * 6) : 0
+            wave: root.flowing ? Math.min(11, 7 + root.audio.level * 10) : 0
             bands: root.audio.bands
             glowColor: root.glowTint
             glowStrength: root.glowLevel * root.glowPulse
