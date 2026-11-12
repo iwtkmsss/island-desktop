@@ -54,6 +54,9 @@ Window {
     Behavior on glowTint { ColorAnimation { duration: root.model.reducedMotion ? 0 : 600 } }
     property real glowLevel: glowActive ? 1 : 0
     Behavior on glowLevel { NumberAnimation { duration: root.model.reducedMotion ? 0 : 450; easing.type: Easing.OutCubic } }
+    // The raw level changes every audio frame; ease it so the glow swells instead of flickering.
+    property real glowPulse: flowing ? 0.78 + 0.22 * Math.min(1, audio.level * 1.6) : 0.85
+    Behavior on glowPulse { SmoothedAnimation { velocity: 0.35; duration: 400 } }
     Binding {
         target: root.audio; property: "enabled"
         value: root.visible && !root.interaction.suppressed && !root.model.reducedMotion
@@ -115,7 +118,7 @@ Window {
             wave: root.flowing ? Math.min(7, 1 + root.audio.level * 6) : 0
             bands: root.audio.bands
             glowColor: root.glowTint
-            glowStrength: root.glowLevel * (root.flowing ? 0.75 + 0.25 * Math.min(1, root.audio.level * 1.6) : 0.85)
+            glowStrength: root.glowLevel * root.glowPulse
             layer.enabled: true
             layer.effect: MultiEffect {
                 shadowEnabled: true

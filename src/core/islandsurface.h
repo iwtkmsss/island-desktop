@@ -1,6 +1,7 @@
 #pragma once
 #include <QQuickPaintedItem>
 #include <QVariantList>
+#include <array>
 #include <QtQml/qqmlregistration.h>
 
 class IslandSurface : public QQuickPaintedItem {
@@ -33,4 +34,5 @@ signals:
 private:
     QColor glowColor_;
     qreal glowStrength_ = 0;
+    std::array<double, 16> smoothedBands_{};
 };

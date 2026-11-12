@@ -27,6 +27,14 @@ void IslandSurface::paint(QPainter *painter) {
     QPainterPath base;
     const qreal cornerRadius = std::clamp(radius, 0.0, std::min(body.width(), body.height()) / 2);
     base.addRoundedRect(body, cornerRadius, cornerRadius);
+    // Ease the spectrum between frames: raw bands change every audio frame and
+    // would make the edge flicker instead of swell.
+    const int bandCount = std::min(static_cast<int>(bands.size()), static_cast<int>(smoothedBands_.size()));
+    for (int i = 0; i < bandCount; ++i) {
+        const double target = std::clamp(bands[i].toDouble(), 0.0, 1.0);
+        smoothedBands_[i] += (target - smoothedBands_[i]) * (target > smoothedBands_[i] ? 0.30 : 0.12);
+    }
+    for (int i = bandCount; i < static_cast<int>(smoothedBands_.size()); ++i) smoothedBands_[i] = 0;
     QPainterPath path;
     constexpr int samples = 200;
     const QPointF pointer(pointerX + 8, pointerY + 8);
@@ -46,15 +54,19 @@ void IslandSurface::paint(QPainter *painter) {
             const double u = (p.x() - body.left() - radius) / (body.width() - 2 * radius);
             const double envelope = std::sin(u * std::numbers::pi);
             double magnitude = 0;
-            if (!bands.isEmpty()) {
-                const double bin = u * (bands.size() - 1);
-                const int lo = std::clamp(static_cast<int>(bin), 0, static_cast<int>(bands.size()) - 1);
-                const int hi = std::min(lo + 1, static_cast<int>(bands.size()) - 1);
-                const double weight = bin - lo;
-                magnitude = std::clamp(bands[lo].toDouble() * (1 - weight) + bands[hi].toDouble() * weight, 0.0, 1.0);
+            if (bandCount > 0) {
+                const double bin = u * (bandCount - 1);
+                const int lo = std::clamp(static_cast<int>(bin), 0, bandCount - 1);
+                const int hi = std::min(lo + 1, bandCount - 1);
+                // Cosine interpolation gives rounded hills instead of straight ramps.
+                const double weight = (1 - std::cos((bin - lo) * std::numbers::pi)) / 2;
+                magnitude = smoothedBands_[lo] * (1 - weight) + smoothedBands_[hi] * weight;
             }
-            p.ry() += wave * envelope * magnitude * (0.65 * std::sin(u * 7 * std::numbers::pi + phase)
-                                      + 0.35 * std::sin(u * 13 * std::numbers::pi - phase * 0.7));
+            // Hills only ever bulge outwards (down); a slow drift keeps them alive
+            // without the edge dipping into the panel. Capped to stay inside the
+            // item's 8 px paint margin together with the glow stroke.
+            const double drift = 0.82 + 0.18 * std::sin(u * 3 * std::numbers::pi + phase);
+            p.ry() += std::min(5.0, wave * envelope * magnitude * drift);
         }
         if (i == 0) path.moveTo(p); else path.lineTo(p);
     }
