@@ -41,6 +41,7 @@ AppState::AppState(const QString &settingsFile, QObject *parent)
         theme_ = savedTheme;
     reducedMotion_ = settings_.value("ui/reducedMotion", false).toBool();
     artworkGlow_ = settings_.value("ui/artworkGlow", true).toBool();
+    eyesEnabled_ = settings_.value("ui/eyesEnabled", true).toBool();
     const int savedMinutes = settings_.value("timer/minutes", 25).toInt();
     if (savedMinutes >= 1 && savedMinutes <= 180)
         countdown_.configure(static_cast<qint64>(savedMinutes) * 60000);
@@ -150,6 +151,13 @@ void AppState::setArtworkGlow(bool enabled) {
     artworkGlow_ = enabled;
     persist("ui/artworkGlow", enabled);
     emit artworkGlowChanged();
+}
+
+void AppState::setEyesEnabled(bool enabled) {
+    if (eyesEnabled_ == enabled) return;
+    eyesEnabled_ = enabled;
+    persist("ui/eyesEnabled", enabled);
+    emit eyesEnabledChanged();
 }
 
 void AppState::setExpanded(bool expanded) {

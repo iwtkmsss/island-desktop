@@ -10,6 +10,32 @@
 class StateTest : public QObject {
     Q_OBJECT
 private slots:
+    void eyesChoicePersistsWithoutChangingContext() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("settings.ini");
+        {
+            AppState state(path);
+            QVERIFY(state.eyesEnabled());
+            state.setSection("media");
+            state.setExpanded(true);
+            QSignalSpy changed(&state, &AppState::eyesEnabledChanged);
+            state.setEyesEnabled(false);
+            state.setEyesEnabled(false);
+            QCOMPARE(changed.count(), 1);
+            QCOMPARE(state.section(), "media");
+            QVERIFY(state.expanded());
+            state.showTemporaryEvent("Event");
+            QVERIFY(!state.eyesEnabled());
+        }
+        {
+            AppState restored(path);
+            QVERIFY(!restored.eyesEnabled());
+            QCOMPARE(restored.section(), "media");
+            restored.setEyesEnabled(true);
+        }
+        AppState restored(path);
+        QVERIFY(restored.eyesEnabled());
+    }
     void volumeFlyoutReturnsToUserSelection() {
         QTemporaryDir dir;
         AppState state(dir.filePath("settings.ini"));

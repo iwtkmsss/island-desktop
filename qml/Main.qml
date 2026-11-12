@@ -31,7 +31,8 @@ Window {
     }
     readonly property bool timerView: model.section === "time" && model.timeView === "timer"
     readonly property bool volumeEvent: model.eventKind === "volume" && model.eventTitle.length > 0
-    readonly property real compactWidth: model.eventTitle.length > 0 ? 268 : mediaSection ? 312 : 238
+    readonly property bool showEyes: model.eyesEnabled && model.eventTitle.length === 0
+    readonly property real compactWidth: model.eventTitle.length > 0 ? 268 : (mediaSection ? 312 : 238) + (showEyes ? 20 : 0)
     property real shellWidth: model.expanded ? Math.min(520, Screen.desktopAvailableWidth - 40)
                                            : compactWidth - interaction.proximity * 5
     readonly property Item activePage: model.settingsOpen ? settingsPage
@@ -154,14 +155,28 @@ Window {
                 contentItem: RowLayout {
                     spacing: 10
                     anchors.fill: parent; anchors.leftMargin: 18; anchors.rightMargin: 18
+                    IslandEyes {
+                        id: compactEyes
+                        visible: root.showEyes
+                        Layout.preferredWidth: 48; Layout.preferredHeight: 28
+                        eyeColor: root.colors.text; pupilColor: root.colors.surface
+                        running: visible && root.visible && !root.model.expanded && !root.interaction.suppressed
+                        reducedMotion: root.model.reducedMotion
+                        attentive: root.interaction.proximity > 0.05
+                        gazeX: Math.max(-1, Math.min(1, (root.interaction.pointerX - 42) / 80))
+                        gazeY: Math.max(-1, Math.min(1, (root.interaction.pointerY - 25) / 65))
+                        audioActive: root.flowing
+                        audioLevel: root.audio.level
+                        bands: root.audio.bands
+                    }
                     Image {
-                        visible: root.mediaSection && root.media.artworkUrl.length > 0 && root.model.eventTitle.length === 0
+                        visible: !root.showEyes && root.mediaSection && root.media.artworkUrl.length > 0 && root.model.eventTitle.length === 0
                         source: root.media.artworkUrl; sourceSize: Qt.size(64, 64)
                         fillMode: Image.PreserveAspectCrop
                         Layout.preferredWidth: 28; Layout.preferredHeight: 28
                     }
                     LineIcon {
-                        visible: !(root.mediaSection && root.media.artworkUrl.length > 0) || root.model.eventTitle.length > 0
+                        visible: !root.showEyes && (!(root.mediaSection && root.media.artworkUrl.length > 0) || root.model.eventTitle.length > 0)
                         name: root.model.eventTitle.length > 0 ? (root.model.eventIcon || "check")
                             : root.mediaSection ? "music"
                             : root.devicesSection ? (root.power.present ? "battery" : "bluetooth")

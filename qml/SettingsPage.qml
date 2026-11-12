@@ -10,9 +10,8 @@ Item {
     required property QtObject monitors
     required property QtObject startup
     required property QtObject hotkeys
-    // Visible height stays as before the "Система" group; the rest scrolls.
-    // Equals the old monitorRow.y + monitorRow.height: the glow row's height plus gap is subtracted.
-    implicitHeight: monitorRow.y + monitorRow.height - (glowRow.implicitHeight + 18)
+    // Fixed viewport: new options extend scroll content, never the native frame.
+    implicitHeight: 266
 
     function reveal(item) {
         const top = item.mapToItem(content, 0, 0).y, bottom = top + item.height + 6
@@ -124,7 +123,7 @@ Item {
         }
         RowLayout {
             id: playerRow
-            y: glowRow.y + glowRow.implicitHeight + 18
+            y: eyesRow.y + eyesRow.implicitHeight + 18
             width: parent.width; height: 34; spacing: 16
             Text { text: "Музичний плеєр"; color: page.colors.text; font.pixelSize: 13; Layout.fillWidth: true }
             ComboBox {
@@ -162,6 +161,33 @@ Item {
                     implicitHeight: Math.min(150, contentItem.contentHeight) + 10
                     contentItem: ListView { clip: true; model: sourcePicker.popup.visible ? sourcePicker.delegateModel : null; currentIndex: sourcePicker.highlightedIndex }
                     background: Rectangle { radius: 11; color: page.colors.raised; border.color: page.colors.line }
+                }
+            }
+        }
+        RowLayout {
+            id: eyesRow
+            y: glowRow.y + glowRow.implicitHeight + 18; width: parent.width
+            Column {
+                Layout.fillWidth: true; spacing: 5
+                Text { text: "Очі в капсулі"; color: page.colors.text; font.pixelSize: 13 }
+                Text { text: "Стежать за курсором і засинають у тиші"; color: page.colors.muted; font.pixelSize: 11 }
+            }
+            Switch {
+                id: eyesSwitch
+                objectName: "eyesToggle"
+                checked: page.model.eyesEnabled
+                Accessible.name: "Очі в капсулі"
+                onToggled: page.model.eyesEnabled = checked
+                onActiveFocusChanged: if (activeFocus) page.reveal(eyesRow)
+                indicator: Rectangle {
+                    x: eyesSwitch.leftPadding; y: (eyesSwitch.height - height) / 2
+                    width: 38; height: 22; radius: 11
+                    color: eyesSwitch.checked ? page.colors.text : page.colors.raised
+                    border.color: eyesSwitch.visualFocus ? page.colors.text : page.colors.line
+                    Rectangle {
+                        x: eyesSwitch.checked ? 19 : 3; y: 3; width: 16; height: 16; radius: 8
+                        color: eyesSwitch.checked ? page.colors.inverse : page.colors.secondary
+                    }
                 }
             }
         }

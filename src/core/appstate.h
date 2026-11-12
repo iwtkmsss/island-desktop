@@ -14,6 +14,7 @@ class AppState final : public QObject {
     Q_PROPERTY(QString theme READ theme WRITE setTheme NOTIFY themeChanged)
     Q_PROPERTY(bool reducedMotion READ reducedMotion WRITE setReducedMotion NOTIFY reducedMotionChanged)
     Q_PROPERTY(bool artworkGlow READ artworkGlow WRITE setArtworkGlow NOTIFY artworkGlowChanged)
+    Q_PROPERTY(bool eyesEnabled READ eyesEnabled WRITE setEyesEnabled NOTIFY eyesEnabledChanged)
     Q_PROPERTY(bool expanded READ expanded WRITE setExpanded NOTIFY expandedChanged)
     Q_PROPERTY(bool settingsOpen READ settingsOpen WRITE setSettingsOpen NOTIFY settingsOpenChanged)
     Q_PROPERTY(QString clockTime READ clockTime NOTIFY clockChanged)
@@ -39,6 +40,7 @@ public:
     QString theme() const { return theme_; }
     bool reducedMotion() const { return reducedMotion_; }
     bool artworkGlow() const { return artworkGlow_; }
+    bool eyesEnabled() const { return eyesEnabled_; }
     bool expanded() const { return expanded_; }
     bool settingsOpen() const { return settingsOpen_; }
     QString clockTime() const { return now_.toString("HH:mm"); }
@@ -64,6 +66,7 @@ public:
     void setTheme(const QString &theme);
     void setReducedMotion(bool enabled);
     void setArtworkGlow(bool enabled);
+    void setEyesEnabled(bool enabled);
     void setExpanded(bool expanded);
     void setSettingsOpen(bool open);
     void showTemporaryEvent(const QString &title, int durationMs = 8000);
@@ -80,6 +83,7 @@ signals:
     void themeChanged();
     void reducedMotionChanged();
     void artworkGlowChanged();
+    void eyesEnabledChanged();
     void expandedChanged();
     void settingsOpenChanged();
     void clockChanged();
@@ -100,6 +104,7 @@ private:
     QString theme_ = "dark";
     bool reducedMotion_ = false;
     bool artworkGlow_ = true;
+    bool eyesEnabled_ = true;
     bool expanded_ = false;
     bool settingsOpen_ = false;
     QDateTime now_;
