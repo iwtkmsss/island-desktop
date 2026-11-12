@@ -11,7 +11,7 @@ Item {
     Row {
         id: switcher
         anchors.horizontalCenter: parent.horizontalCenter
-        spacing: 3
+        spacing: 3; height: 34 // fixed: a hidden Row reports 0 and would retarget the shell
         ActionButton { colors: page.colors; text: "Годинник"; implicitWidth: contentItem.implicitWidth + 22; selected: !page.timerView; onClicked: page.model.timeView = "clock" }
         ActionButton { colors: page.colors; text: "Таймер"; implicitWidth: contentItem.implicitWidth + 22; selected: page.timerView; onClicked: page.model.timeView = "timer" }
     }

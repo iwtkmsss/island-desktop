@@ -61,9 +61,14 @@ Window {
     Behavior on shellHeight {
         id: heightTransition
         property bool previousExpanded: false
-        property bool resizingPage: false
+        // True from an open/close until its animation has had time to finish.
+        // Page heights may still settle during that window (layouts of a page
+        // that just became visible); those retargets must keep the open/close
+        // motion instead of being mistaken for a tab change.
+        property bool inTransition: false
+        readonly property bool resizingPage: !inTransition
         onTargetValueChanged: {
-            resizingPage = previousExpanded && root.model.expanded
+            if (previousExpanded !== root.model.expanded) { inTransition = true; transitionEnd.restart() }
             previousExpanded = root.model.expanded
         }
         NumberAnimation {
@@ -72,6 +77,7 @@ Window {
             easing.overshoot: 0.55
         }
     }
+    Timer { id: transitionEnd; interval: root.motionDuration + 40; onTriggered: heightTransition.inTransition = false }
     NumberAnimation on wavePhase {
         from: 0; to: Math.PI * 2; duration: 2400; loops: Animation.Infinite
         running: root.flowing
@@ -179,8 +185,13 @@ Window {
             Item {
                 id: expandedContent
                 x: 23; y: 24; width: parent.width - 46; height: pages.y + pages.height
-                opacity: root.model.expanded && root.shellHeight > 120 ? 1 : 0
-                visible: opacity > 0; enabled: root.model.expanded
+                // While opening, reveal the content once the shell is tall enough;
+                // short pages never reach 190 px, so the limit follows the page.
+                opacity: root.model.expanded && (!heightTransition.inTransition
+                    || root.shellHeight > Math.min(190, root.expandedHeight - 24)) ? 1 : 0
+                // Stays in the scene while transparent: hiding it would collapse
+                // layout-based page heights and retarget the opening animation.
+                enabled: root.model.expanded
                 Behavior on opacity { NumberAnimation { duration: root.motionDuration * 0.5 } }
                 RowLayout {
                     id: header
