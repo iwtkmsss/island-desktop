@@ -11,14 +11,16 @@ qt_add_executable(IslandDesktop WIN32
     ../src/main.cpp
     ../src/platform/mediacontroller.h ../src/platform/shellcontroller.h
     ../src/platform/volumecontroller.h ../src/platform/audiocontroller.h
+    ../src/platform/startupcontroller.h ../src/platform/hotkeycontroller.h
     "${island_platform_dir}/mediacontroller.cpp" "${island_platform_dir}/shellcontroller.cpp"
     "${island_platform_dir}/volumecontroller.cpp" "${island_platform_dir}/audiocontroller.cpp"
+    "${island_platform_dir}/startupcontroller.cpp" "${island_platform_dir}/hotkeycontroller.cpp"
     ../src/core/monitorcontroller.cpp ../src/core/monitorcontroller.h ../src/core/monitorselection.h)
 target_include_directories(IslandDesktop PRIVATE "${PROJECT_SOURCE_DIR}/src/platform")
 set_target_properties(IslandDesktop PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}")
 target_link_libraries(IslandDesktop PRIVATE island_core Qt6::Quick Qt6::QuickControls2 Qt6::Widgets Qt6::Network)
 set(island_qml_files)
-foreach(name Main IslandColors LineIcon ActionButton PlaybackIndicator TimePage ClockPage TimerPage MusicPage SettingsPage SoundSlider AudioMeter)
+foreach(name Main IslandColors LineIcon ActionButton PlaybackIndicator TimePage ClockPage TimerPage MusicPage SettingsPage SoundSlider AudioMeter HotkeyField)
     set(qml_file "${PROJECT_SOURCE_DIR}/qml/${name}.qml")
     set_source_files_properties("${qml_file}" PROPERTIES QT_RESOURCE_ALIAS "${name}.qml")
     list(APPEND island_qml_files "${qml_file}")

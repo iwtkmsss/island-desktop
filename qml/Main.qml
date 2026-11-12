@@ -12,6 +12,8 @@ Window {
     required property QtObject volume
     required property QtObject audio
     required property QtObject monitors
+    required property QtObject startup
+    required property QtObject hotkeys
     title: "Island Desktop"
     visible: true
     color: "transparent"
@@ -196,7 +198,7 @@ Window {
                     x: 0; y: 58; width: parent.width; height: root.activePage.implicitHeight
                     TimePage { id: timePage; anchors.fill: parent; colors: root.colors; model: root.model; visible: root.activePage === timePage }
                     MusicPage { id: musicPage; anchors.fill: parent; colors: root.colors; media: root.media; model: root.model; audio: root.audio; volume: root.volume; visible: root.activePage === musicPage }
-                    SettingsPage { id: settingsPage; anchors.fill: parent; colors: root.colors; model: root.model; media: root.media; monitors: root.monitors; visible: root.activePage === settingsPage }
+                    SettingsPage { id: settingsPage; anchors.fill: parent; colors: root.colors; model: root.model; media: root.media; monitors: root.monitors; startup: root.startup; hotkeys: root.hotkeys; visible: root.activePage === settingsPage }
                 }
             }
             Rectangle {

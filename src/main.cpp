@@ -4,6 +4,8 @@
 #include "volumecontroller.h"
 #include "audiocontroller.h"
 #include "monitorcontroller.h"
+#include "startupcontroller.h"
+#include "hotkeycontroller.h"
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QCryptographicHash>
@@ -118,6 +120,11 @@ int main(int argc, char *argv[]) {
     VolumeController volume;
     AudioController audio;
     MonitorController monitors(settingsFile);
+    StartupController startup;
+    HotkeyController hotkeys(settingsFile);
+    // Development runs must not grab global keys.
+    if (parser.isSet("smoke-test") || parser.isSet("screenshot") || parser.isSet("diagnostics"))
+        hotkeys.setSuspended(true);
     ShellController interaction(&state);
     if (parser.isSet("pin")) interaction.setPinned(true);
     QObject::connect(&volume, &VolumeController::volumeEvent, &state, [&](int value, bool muted) {
@@ -135,7 +142,8 @@ int main(int argc, char *argv[]) {
     engine.setInitialProperties({{"model", QVariant::fromValue(&state)},
         {"media", QVariant::fromValue(&media)}, {"interaction", QVariant::fromValue(&interaction)},
         {"volume", QVariant::fromValue(&volume)}, {"audio", QVariant::fromValue(&audio)},
-        {"monitors", QVariant::fromValue(&monitors)}});
+        {"monitors", QVariant::fromValue(&monitors)},
+        {"startup", QVariant::fromValue(&startup)}, {"hotkeys", QVariant::fromValue(&hotkeys)}});
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app, [] {
         QCoreApplication::exit(1);
     }, Qt::QueuedConnection);
@@ -196,6 +204,21 @@ int main(int argc, char *argv[]) {
         tray.showMessage(QStringLiteral("Час вийшов"), QStringLiteral("Таймер Island Desktop завершено."), QSystemTrayIcon::Information, 8000);
     });
     if (QSystemTrayIcon::isSystemTrayAvailable()) tray.show();
+
+    // Global hotkeys. The explicit toggle also overrides a manual tray hide.
+    QObject::connect(&hotkeys, &HotkeyController::toggleRequested, &app, [&] {
+        if (state.expanded()) {
+            interaction.setPinned(false);
+            interaction.close();
+        } else {
+            interaction.open();
+            interaction.setPinned(true);
+            showIsland();
+        }
+    });
+    QObject::connect(&hotkeys, &HotkeyController::playPauseRequested, &app, [&] {
+        if (media.canToggle() && !media.busy()) media.togglePlayback();
+    });
 
     if (parser.isSet("screenshot") || parser.isSet("diagnostics") || parser.isSet("smoke-test")) {
         bool validDelay = false;
