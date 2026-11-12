@@ -270,6 +270,21 @@ private slots:
         QCOMPARE(state.section(), "time");
         QCOMPARE(state.theme(), "dark");
     }
+    void devicesSectionPersistsAndSurvivesTemporaryEvent() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("settings.ini");
+        {
+            AppState state(path);
+            state.setSection("devices");
+            QCOMPARE(state.section(), "devices");
+            state.showTemporaryEvent("Event", 10);
+            QCOMPARE(state.section(), "devices");
+            QTRY_VERIFY(state.eventTitle().isEmpty());
+            QCOMPARE(state.section(), "devices");
+        }
+        AppState restored(path);
+        QCOMPARE(restored.section(), "devices");
+    }
     void eventExpiresWithoutChangingSelection() {
         QTemporaryDir dir;
         AppState state(dir.filePath("settings.ini"));

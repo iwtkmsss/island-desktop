@@ -96,6 +96,39 @@ Canvas {
             line(6, 12, 18, 12)
         } else if (name === "plus") {
             line(6, 12, 18, 12); line(12, 6, 12, 18)
+        } else if (name === "bluetooth") {
+            c.beginPath(); c.moveTo(6.5, 7.5); c.lineTo(17, 16.5); c.lineTo(12, 21); c.lineTo(12, 3); c.lineTo(17, 7.5); c.lineTo(6.5, 16.5); c.stroke()
+        } else if (name === "battery") {
+            c.beginPath(); c.roundedRect(2.5, 7, 17, 10, 2.5, 2.5); c.stroke()
+            line(22, 10.5, 22, 13.5)
+        } else if (name === "plug") {
+            line(9, 3, 9, 8); line(15, 3, 15, 8)
+            c.beginPath(); c.moveTo(6.5, 8); c.lineTo(17.5, 8); c.lineTo(17.5, 11.5); c.bezierCurveTo(17.5, 14.5, 15, 16, 12, 16); c.bezierCurveTo(9, 16, 6.5, 14.5, 6.5, 11.5); c.closePath(); c.stroke()
+            line(12, 16, 12, 21)
+        } else if (name === "headphones") {
+            c.beginPath(); c.arc(12, 13, 8, Math.PI, 0); c.stroke()
+            c.beginPath(); c.roundedRect(3.5, 13, 4, 7, 1.8, 1.8); c.stroke()
+            c.beginPath(); c.roundedRect(16.5, 13, 4, 7, 1.8, 1.8); c.stroke()
+        } else if (name === "keyboard") {
+            c.beginPath(); c.roundedRect(2.5, 6, 19, 12, 2.5, 2.5); c.stroke()
+            line(6.5, 10, 6.6, 10); line(10, 10, 10.1, 10); line(13.5, 10, 13.6, 10); line(17, 10, 17.1, 10)
+            line(8, 14, 16, 14)
+        } else if (name === "mouse") {
+            c.beginPath(); c.roundedRect(6.5, 3, 11, 18, 5.5, 5.5); c.stroke()
+            line(12, 3.5, 12, 9)
+        } else if (name === "phone") {
+            c.beginPath(); c.roundedRect(6.5, 2.5, 11, 19, 2.5, 2.5); c.stroke()
+            line(11, 18.5, 13, 18.5)
+        } else if (name === "computer") {
+            c.beginPath(); c.roundedRect(3, 4.5, 18, 12, 2, 2); c.stroke()
+            line(12, 16.5, 12, 20); line(8, 20, 16, 20)
+        } else if (name === "gamepad") {
+            c.beginPath(); c.roundedRect(2.5, 7, 19, 11, 5, 5); c.stroke()
+            line(7.5, 10.5, 7.5, 14.5); line(5.5, 12.5, 9.5, 12.5)
+            line(15.5, 11.5, 15.6, 11.5); line(18, 13.5, 18.1, 13.5)
+        } else if (name === "device") {
+            c.beginPath(); c.roundedRect(4, 4, 16, 16, 4, 4); c.stroke()
+            c.beginPath(); c.arc(12, 12, 1.6, 0, Math.PI * 2); c.fill()
         }
     }
 }

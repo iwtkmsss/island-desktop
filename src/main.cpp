@@ -6,6 +6,9 @@
 #include "monitorcontroller.h"
 #include "startupcontroller.h"
 #include "hotkeycontroller.h"
+#include "powercontroller.h"
+#include "bluetoothcontroller.h"
+#include "eventtext.h"
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QCryptographicHash>
@@ -76,7 +79,7 @@ int main(int argc, char *argv[]) {
     parser.addOption({"settings", "Use a separate settings file (development).", "file"});
     parser.addOption({"expanded", "Open the expanded panel."});
     parser.addOption({"pin", "Keep the expanded panel open."});
-    parser.addOption({"section", "Open time or media (legacy: clock, timer, music, volume).", "id"});
+    parser.addOption({"section", "Open time, media or devices (legacy: clock, timer, music, volume).", "id"});
     parser.addOption({"theme", "Use dark or light theme.", "theme"});
     parser.addOption({"smoke-test", "Load QML and exit automatically."});
     parser.addOption({"inspect-ui", "Expose a normal taskbar window for UI inspection (development)."});
@@ -125,6 +128,8 @@ int main(int argc, char *argv[]) {
     // Development runs must not grab global keys.
     if (parser.isSet("smoke-test") || parser.isSet("screenshot") || parser.isSet("diagnostics"))
         hotkeys.setSuspended(true);
+    PowerController power;
+    BluetoothController bluetooth;
     ShellController interaction(&state);
     if (parser.isSet("pin")) interaction.setPinned(true);
     QObject::connect(&volume, &VolumeController::volumeEvent, &state, [&](int value, bool muted) {
@@ -132,6 +137,14 @@ int main(int argc, char *argv[]) {
         if (!state.expanded() || state.section() != "media" || state.settingsOpen())
             state.showVolumeEvent(value, muted);
     });
+
+    QObject::connect(&power, &PowerController::powerEvent, &state, [&](int event, int percent) {
+        state.postEvent(powerIslandEvent(static_cast<PowerEvent>(event), percent));
+    });
+    QObject::connect(&bluetooth, &BluetoothController::deviceEvent, &state,
+        [&](const QString &id, const QString &name, bool connected, int battery) {
+            state.postEvent(deviceIslandEvent(id, name, connected, battery));
+        });
 
     QQmlApplicationEngine engine;
     int qmlWarningCount = 0;
@@ -143,7 +156,8 @@ int main(int argc, char *argv[]) {
         {"media", QVariant::fromValue(&media)}, {"interaction", QVariant::fromValue(&interaction)},
         {"volume", QVariant::fromValue(&volume)}, {"audio", QVariant::fromValue(&audio)},
         {"monitors", QVariant::fromValue(&monitors)},
-        {"startup", QVariant::fromValue(&startup)}, {"hotkeys", QVariant::fromValue(&hotkeys)}});
+        {"startup", QVariant::fromValue(&startup)}, {"hotkeys", QVariant::fromValue(&hotkeys)},
+        {"power", QVariant::fromValue(&power)}, {"bluetooth", QVariant::fromValue(&bluetooth)}});
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app, [] {
         QCoreApplication::exit(1);
     }, Qt::QueuedConnection);
@@ -240,6 +254,8 @@ int main(int argc, char *argv[]) {
                         {"optionsCount", static_cast<int>(monitors.options().size())}}},
                     {"volume", QJsonObject{{"available", volume.available()}, {"percent", volume.volume()}, {"muted", volume.muted()}, {"device", volume.deviceName()}, {"error", volume.error()}}},
                     {"audio", QJsonObject{{"enabled", audio.enabled()}, {"available", audio.available()}, {"active", audio.active()}, {"level", audio.level()}, {"bands", QJsonArray::fromVariantList(audio.bands())}, {"error", audio.error()}}},
+                    {"power", QJsonObject{{"present", power.present()}, {"percent", power.percent()}, {"charging", power.charging()}}},
+                    {"bluetooth", QJsonObject{{"available", bluetooth.available()}, {"connectedCount", bluetooth.connectedCount()}, {"deviceCount", static_cast<int>(bluetooth.devices().size())}}},
                     {"shell", QJsonObject{{"expanded", state.expanded()}, {"pinned", interaction.pinned()}, {"suppressed", interaction.property("suppressed").toBool()}}}};
                 QSaveFile file(path);
                 const bool opened = file.open(QIODevice::WriteOnly);

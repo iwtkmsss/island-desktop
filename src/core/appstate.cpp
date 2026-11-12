@@ -8,7 +8,7 @@ namespace {
 // Maps a current or legacy section id to a section and an optional time view.
 bool mapSection(const QString &id, QString &section, QString &view) {
     view.clear();
-    if (id == "time" || id == "media") {
+    if (id == "time" || id == "media" || id == "devices") {
         section = id;
     } else if (id == "clock" || id == "timer") {
         section = QStringLiteral("time");
