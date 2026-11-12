@@ -22,6 +22,7 @@ Window {
     flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
     readonly property IslandColors colors: IslandColors { light: root.model.theme === "light" }
     readonly property int motionDuration: model.reducedMotion ? 0 : 380
+    readonly property bool homeSection: model.section === "home"
     readonly property bool mediaSection: model.section === "media"
     readonly property bool devicesSection: model.section === "devices"
     readonly property var connectedDevice: {
@@ -31,12 +32,12 @@ Window {
     }
     readonly property bool timerView: model.section === "time" && model.timeView === "timer"
     readonly property bool volumeEvent: model.eventKind === "volume" && model.eventTitle.length > 0
-    readonly property bool showEyes: model.eyesEnabled && model.eventTitle.length === 0
-    readonly property real compactWidth: model.eventTitle.length > 0 ? 268 : (mediaSection ? 312 : 238) + (showEyes ? 20 : 0)
+    readonly property bool showHomeEyes: homeSection && model.eyesEnabled && model.eventTitle.length === 0
+    readonly property real compactWidth: model.eventTitle.length > 0 ? 268 : showHomeEyes ? 148 : mediaSection ? 312 : 238
     property real shellWidth: model.expanded ? Math.min(520, Screen.desktopAvailableWidth - 40)
                                            : compactWidth - interaction.proximity * 5
     readonly property Item activePage: model.settingsOpen ? settingsPage
-        : model.section === "time" ? timePage : devicesSection ? devicesPage : musicPage
+        : homeSection ? homePage : model.section === "time" ? timePage : devicesSection ? devicesPage : musicPage
     readonly property real expandedHeight: 24 + 58 + activePage.implicitHeight + 24 + 2
     property real shellHeight: model.expanded ? expandedHeight : 50 + interaction.proximity * 1.5
     property real wavePhase: 0
@@ -69,7 +70,7 @@ Window {
     Binding {
         target: root.audio; property: "enabled"
         value: root.visible && !root.interaction.suppressed && !root.model.reducedMotion
-            && root.mediaSection && !root.model.settingsOpen
+            && (root.mediaSection || root.showHomeEyes) && !root.model.settingsOpen
             && root.volume.available && !root.volume.muted && root.volume.volume > 0
     }
     // Fixed native frame, as in the supplied mod: the window is never resized
@@ -112,6 +113,7 @@ Window {
     Shortcut { sequence: "Ctrl+1"; onActivated: root.model.section = "time" }
     Shortcut { sequence: "Ctrl+2"; onActivated: root.model.section = "media" }
     Shortcut { sequence: "Ctrl+3"; onActivated: root.model.section = "devices" }
+    Shortcut { sequence: "Ctrl+4"; onActivated: root.model.section = "home" }
 
     Item {
         id: shell
@@ -145,83 +147,87 @@ Window {
                 visible: opacity > 0; enabled: !root.model.expanded
                 opacity: root.model.expanded ? 0 : 1
                 padding: 0; hoverEnabled: true; focusPolicy: Qt.StrongFocus
-                Accessible.name: "Розгорнути острівець"
+                Accessible.name: root.homeSection ? "Відкрити головну" : "Розгорнути острівець"
                 onClicked: { root.interaction.open(); root.model.dismissEvent() }
                 background: Rectangle {
                     color: "transparent"; radius: 25
                     border.width: compact.visualFocus ? 2 : 0; border.color: root.colors.secondary
                 }
                 Behavior on opacity { NumberAnimation { duration: root.motionDuration / 3 } }
-                contentItem: RowLayout {
-                    spacing: 10
-                    anchors.fill: parent; anchors.leftMargin: 18; anchors.rightMargin: 18
+                contentItem: Item {
                     IslandEyes {
-                        id: compactEyes
-                        visible: root.showEyes
-                        Layout.preferredWidth: 48; Layout.preferredHeight: 28
+                        objectName: "homeCompactEyes"
+                        anchors.centerIn: parent
+                        width: 48; height: 28
+                        visible: root.showHomeEyes
                         eyeColor: root.colors.text; pupilColor: root.colors.surface
                         running: visible && root.visible && !root.model.expanded && !root.interaction.suppressed
                         reducedMotion: root.model.reducedMotion
-                        attentive: root.interaction.proximity > 0.05
-                        gazeX: Math.max(-1, Math.min(1, (root.interaction.pointerX - 42) / 80))
-                        gazeY: Math.max(-1, Math.min(1, (root.interaction.pointerY - 25) / 65))
-                        audioActive: root.flowing
-                        audioLevel: root.audio.level
-                        bands: root.audio.bands
+                        gazeX: root.interaction.gazeX; gazeY: root.interaction.gazeY
+                        activitySerial: root.interaction.pointerActivity
+                        audioActive: root.audio.enabled && root.audio.active
+                        audioLevel: root.audio.level; bands: root.audio.bands
                     }
-                    Image {
-                        visible: !root.showEyes && root.mediaSection && root.media.artworkUrl.length > 0 && root.model.eventTitle.length === 0
-                        source: root.media.artworkUrl; sourceSize: Qt.size(64, 64)
-                        fillMode: Image.PreserveAspectCrop
-                        Layout.preferredWidth: 28; Layout.preferredHeight: 28
-                    }
-                    LineIcon {
-                        visible: !root.showEyes && (!(root.mediaSection && root.media.artworkUrl.length > 0) || root.model.eventTitle.length > 0)
-                        name: root.model.eventTitle.length > 0 ? (root.model.eventIcon || "check")
-                            : root.mediaSection ? "music"
-                            : root.devicesSection ? (root.power.present ? "battery" : "bluetooth")
-                            : root.model.timeView === "timer" ? "timer" : "clock"
-                        color: root.colors.text; Layout.preferredWidth: 19; Layout.preferredHeight: 19
-                    }
-                    Column {
-                        Layout.fillWidth: true; spacing: 1
-                        Text {
-                            width: parent.width
-                            text: root.model.eventTitle.length > 0 ? root.model.eventTitle
-                                : root.mediaSection ? (root.media.available ? (root.media.title || "Без назви") : root.media.busy ? "Підключення плеєра…" : "Музика")
-                                : root.devicesSection ? (root.power.present ? (root.power.percent >= 0 ? root.power.percent + "%" : "Батарея")
-                                    : root.connectedDevice ? root.connectedDevice.name : "Пристрої")
-                                : root.model.timeView === "timer" ? root.model.timerText : root.model.clockTime
-                            color: root.colors.text; font.pixelSize: 13; font.weight: Font.DemiBold
-                            textFormat: Text.PlainText
-                            elide: Text.ElideRight
+                    RowLayout {
+                        visible: !root.showHomeEyes
+                        spacing: 10
+                        anchors.fill: parent; anchors.leftMargin: 18; anchors.rightMargin: 18
+                        Image {
+                            visible: root.mediaSection && root.media.artworkUrl.length > 0 && root.model.eventTitle.length === 0
+                            source: root.media.artworkUrl; sourceSize: Qt.size(64, 64)
+                            fillMode: Image.PreserveAspectCrop
+                            Layout.preferredWidth: 28; Layout.preferredHeight: 28
                         }
-                        Text {
+                        LineIcon {
+                            visible: !(root.mediaSection && root.media.artworkUrl.length > 0) || root.model.eventTitle.length > 0
+                            name: root.model.eventTitle.length > 0 ? (root.model.eventIcon || "check")
+                                : root.homeSection ? "home"
+                                : root.mediaSection ? "music"
+                                : root.devicesSection ? (root.power.present ? "battery" : "bluetooth")
+                                : root.model.timeView === "timer" ? "timer" : "clock"
+                            color: root.colors.text; Layout.preferredWidth: 19; Layout.preferredHeight: 19
+                        }
+                        Column {
+                            Layout.fillWidth: true; spacing: 1
+                            Text {
+                                width: parent.width
+                                text: root.model.eventTitle.length > 0 ? root.model.eventTitle
+                                    : root.homeSection ? "Головна"
+                                    : root.mediaSection ? (root.media.available ? (root.media.title || "Без назви") : root.media.busy ? "Підключення плеєра…" : "Музика")
+                                    : root.devicesSection ? (root.power.present ? (root.power.percent >= 0 ? root.power.percent + "%" : "Батарея")
+                                        : root.connectedDevice ? root.connectedDevice.name : "Пристрої")
+                                    : root.model.timeView === "timer" ? root.model.timerText : root.model.clockTime
+                                color: root.colors.text; font.pixelSize: 13; font.weight: Font.DemiBold
+                                textFormat: Text.PlainText
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                visible: root.mediaSection && root.media.available && root.model.eventTitle.length === 0
+                                width: parent.width; text: root.media.artist || root.media.sourceName
+                                textFormat: Text.PlainText
+                                color: root.colors.secondary; font.pixelSize: 11; elide: Text.ElideRight
+                            }
+                        }
+                        ActionButton {
                             visible: root.mediaSection && root.media.available && root.model.eventTitle.length === 0
-                            width: parent.width; text: root.media.artist || root.media.sourceName
-                            textFormat: Text.PlainText
-                            color: root.colors.secondary; font.pixelSize: 11; elide: Text.ElideRight
+                            colors: root.colors
+                            iconName: root.media.playing ? "pause" : "play"
+                            hint: root.media.playing ? "Призупинити" : "Відтворити"
+                            enabled: root.media.canToggle && !root.media.busy
+                            onClicked: root.media.togglePlayback()
+                            Layout.preferredWidth: 26; Layout.preferredHeight: 26
                         }
+                        Text {
+                            visible: !root.homeSection && !root.mediaSection && root.model.eventTitle.length === 0
+                            textFormat: Text.PlainText
+                            text: root.devicesSection ? (root.power.present ? (root.power.charging ? "Заряджання" : "Батарея")
+                                    : root.connectedDevice ? (root.connectedDevice.battery >= 0 ? root.connectedDevice.battery + "%" : "Підключено") : "Bluetooth")
+                                : root.model.timeView !== "timer" ? root.model.clockWeekdayShort
+                                : root.model.timerState === "running" ? "Відлік" : root.model.timerState === "paused" ? "Пауза" : root.model.timerState === "finished" ? "Готово" : "Таймер"
+                            color: root.colors.secondary; font.pixelSize: 11
+                        }
+                        LineIcon { name: "down"; color: root.colors.secondary; Layout.preferredWidth: 16; Layout.preferredHeight: 16 }
                     }
-                    ActionButton {
-                        visible: root.mediaSection && root.media.available && root.model.eventTitle.length === 0
-                        colors: root.colors
-                        iconName: root.media.playing ? "pause" : "play"
-                        hint: root.media.playing ? "Призупинити" : "Відтворити"
-                        enabled: root.media.canToggle && !root.media.busy
-                        onClicked: root.media.togglePlayback()
-                        Layout.preferredWidth: 26; Layout.preferredHeight: 26
-                    }
-                    Text {
-                        visible: !root.mediaSection && root.model.eventTitle.length === 0
-                        textFormat: Text.PlainText
-                        text: root.devicesSection ? (root.power.present ? (root.power.charging ? "Заряджання" : "Батарея")
-                                : root.connectedDevice ? (root.connectedDevice.battery >= 0 ? root.connectedDevice.battery + "%" : "Підключено") : "Bluetooth")
-                            : root.model.timeView !== "timer" ? root.model.clockWeekdayShort
-                            : root.model.timerState === "running" ? "Відлік" : root.model.timerState === "paused" ? "Пауза" : root.model.timerState === "finished" ? "Готово" : "Таймер"
-                        color: root.colors.secondary; font.pixelSize: 11
-                    }
-                    LineIcon { name: "down"; color: root.colors.secondary; Layout.preferredWidth: 16; Layout.preferredHeight: 16 }
                 }
             }
 
@@ -240,7 +246,7 @@ Window {
                     id: header
                     width: parent.width; spacing: 3
                     Repeater {
-                        model: [{ key: "time", label: "Час", icon: "clock" }, { key: "media", label: "Медіа", icon: "music" },
+                        model: [{ key: "home", label: "Головна", icon: "home" }, { key: "time", label: "Час", icon: "clock" }, { key: "media", label: "Медіа", icon: "music" },
                                 { key: "devices", label: "Пристрої", icon: "bluetooth" }]
                         ActionButton {
                             required property var modelData
@@ -267,6 +273,13 @@ Window {
                 Item {
                     id: pages
                     x: 0; y: 58; width: parent.width; height: root.activePage.implicitHeight
+                    HomePage {
+                        id: homePage
+                        anchors.fill: parent; colors: root.colors; model: root.model
+                        interaction: root.interaction; audio: root.audio
+                        visible: root.activePage === homePage
+                        active: visible && root.visible && root.model.expanded && !root.interaction.suppressed && root.model.eventTitle.length === 0
+                    }
                     TimePage { id: timePage; anchors.fill: parent; colors: root.colors; model: root.model; visible: root.activePage === timePage }
                     MusicPage { id: musicPage; anchors.fill: parent; colors: root.colors; media: root.media; model: root.model; audio: root.audio; volume: root.volume; visible: root.activePage === musicPage }
                     DevicesPage { id: devicesPage; anchors.fill: parent; colors: root.colors; power: root.power; bluetooth: root.bluetooth; visible: root.activePage === devicesPage }

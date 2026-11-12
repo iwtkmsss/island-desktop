@@ -15,6 +15,7 @@ Item {
     property bool running: false
     property bool reducedMotion: false
     property bool attentive: false
+    property real activitySerial: 0
     property real gazeX: 0
     property real gazeY: 0
     property bool audioActive: false
@@ -102,6 +103,7 @@ Item {
     }
 
     onMotionAllowedChanged: resetMotion()
+    onActivitySerialChanged: if (motionAllowed) { _quietSince = Date.now(); sleeping = false; step() }
     onAttentiveChanged: if (attentive && motionAllowed) { _quietSince = Date.now(); sleeping = false; step() }
     onAudibleChanged: if (audible && motionAllowed) { _quietSince = Date.now(); sleeping = false; step() }
     Component.onCompleted: resetMotion()
@@ -124,8 +126,8 @@ Item {
             readonly property real energy: eyes.motionAllowed ? eyes._energy : 0
             width: 8
             height: Math.max(1.6, (13 + 1.5 * energy) * opening)
-            x: eyes.width / 2 + (index === 0 ? -13 : 5)
-            y: (eyes.height - height) / 2 - energy * 0.5
+            x: eyes.width / 2 + (index === 0 ? -13 : 5) + (eyes.motionAllowed ? eyes._lookX * 2.5 : 0)
+            y: (eyes.height - height) / 2 - energy * 0.5 + (eyes.motionAllowed ? eyes._lookY * 1.5 : 0)
             radius: Math.min(width, height) / 2
             color: eyes.eyeColor
             antialiasing: true

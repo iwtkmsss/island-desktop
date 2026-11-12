@@ -27,7 +27,11 @@ Canvas {
         function circle(x, y, r) {
             c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.stroke()
         }
-        if (name === "clock") {
+        if (name === "home") {
+            c.beginPath(); c.moveTo(3, 10.5); c.lineTo(12, 3.5); c.lineTo(21, 10.5); c.stroke()
+            c.beginPath(); c.moveTo(5.5, 9); c.lineTo(5.5, 20); c.lineTo(18.5, 20); c.lineTo(18.5, 9); c.stroke()
+            c.beginPath(); c.moveTo(10, 20); c.lineTo(10, 14); c.lineTo(14, 14); c.lineTo(14, 20); c.stroke()
+        } else if (name === "clock") {
             circle(12, 12, 8.5); line(12, 7, 12, 12); line(12, 12, 15.5, 14)
         } else if (name === "timer") {
             circle(12, 13.5, 7.5); line(9, 3, 15, 3); line(12, 3, 12, 6)

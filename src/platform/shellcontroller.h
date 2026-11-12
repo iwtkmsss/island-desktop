@@ -1,5 +1,6 @@
 #pragma once
 #include "borrowed/spring.h"
+#include "cursorgaze.h"
 #include "shellinteraction.h"
 #include <QElapsedTimer>
 #include <QObject>
@@ -12,6 +13,9 @@ class ShellController final : public QObject {
     Q_PROPERTY(qreal pointerX READ pointerX NOTIFY pointerChanged)
     Q_PROPERTY(qreal pointerY READ pointerY NOTIFY pointerChanged)
     Q_PROPERTY(qreal proximity READ proximity NOTIFY pointerChanged)
+    Q_PROPERTY(qreal gazeX READ gazeX NOTIFY gazeChanged)
+    Q_PROPERTY(qreal gazeY READ gazeY NOTIFY gazeChanged)
+    Q_PROPERTY(quint64 pointerActivity READ pointerActivity NOTIFY gazeChanged)
     Q_PROPERTY(bool pinned READ pinned WRITE setPinned NOTIFY pinnedChanged)
     Q_PROPERTY(bool suppressed READ suppressed NOTIFY suppressionChanged)
 public:
@@ -21,6 +25,9 @@ public:
     qreal pointerX() const { return x_.value; }
     qreal pointerY() const { return y_.value; }
     qreal proximity() const { return proximity_.value; }
+    qreal gazeX() const { return gaze_.x(); }
+    qreal gazeY() const { return gaze_.y(); }
+    quint64 pointerActivity() const { return gaze_.activity(); }
     bool pinned() const { return pinned_; }
     bool suppressed() const { return suppressed_; }
     void setPinned(bool pinned);
@@ -31,10 +38,13 @@ public:
 signals:
     void frameRequested();
     void pointerChanged();
+    void gazeChanged();
     void pinnedChanged();
     void suppressionChanged();
 private:
     void poll();
+    bool gazeTrackingEnabled() const;
+    void resetGaze();
     void setSuppressed(bool suppressed);
     void setNativeInputSuppressed(bool suppressed);
     void setClickThrough(bool clickThrough);
@@ -48,6 +58,7 @@ private:
     qint64 nextFullscreenCheck_ = 0;
     ShellInteraction interaction_;
     IslandSpring x_, y_, proximity_;
+    CursorGaze gaze_;
     bool pinned_ = false;
     bool wasPressed_ = false;
     bool ignorePressUntilRelease_ = false;

@@ -7,6 +7,7 @@
 #include <QMouseEvent>
 #include <QPainterPath>
 #include <QQuickWindow>
+#include <QScreen>
 #ifdef Q_OS_WIN
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -62,6 +63,14 @@ bool foregroundFillsIslandMonitor(QQuickWindow *island) {
 ShellController::ShellController(AppState *state, QObject *parent) : QObject(parent), state_(state) {
     clock_.start();
     connect(&ticker_, &QTimer::timeout, this, &ShellController::poll);
+    const auto resetInactiveGaze = [this] {
+        if (!gazeTrackingEnabled()) resetGaze();
+    };
+    connect(state_, &AppState::sectionChanged, this, resetInactiveGaze);
+    connect(state_, &AppState::eyesEnabledChanged, this, resetInactiveGaze);
+    connect(state_, &AppState::reducedMotionChanged, this, resetInactiveGaze);
+    connect(state_, &AppState::settingsOpenChanged, this, resetInactiveGaze);
+    connect(state_, &AppState::eventChanged, this, resetInactiveGaze);
     connect(state_, &AppState::expandedChanged, this, [this] {
         if (!state_->expanded()) {
             interaction_.suppressUntilLeave();
@@ -78,12 +87,17 @@ ShellController::ShellController(AppState *state, QObject *parent) : QObject(par
 ShellController::~ShellController() { setNativeInputSuppressed(false); }
 void ShellController::attach(QQuickWindow *window) {
     window_ = window;
+    resetGaze();
+    connect(window, &QWindow::visibleChanged, this, [this] {
+        if (!gazeTrackingEnabled()) resetGaze();
+    });
     connect(window, &QWindow::xChanged, this, [this] { geometryChanged_ = true; });
     connect(window, &QWindow::yChanged, this, [this] { geometryChanged_ = true; });
     connect(window, &QWindow::widthChanged, this, [this] { geometryChanged_ = true; });
     connect(window, &QWindow::heightChanged, this, [this] { geometryChanged_ = true; });
     connect(window, &QObject::destroyed, this, [this] {
         window_ = nullptr;
+        resetGaze();
         ticker_.stop();
         setNativeInputSuppressed(false);
     });
@@ -112,6 +126,7 @@ void ShellController::setSuppressed(bool suppressed) {
         return;
     }
     suppressed_ = suppressed;
+    if (suppressed) resetGaze();
     interaction_.suspend();
     wasPressed_ = false;
     ignorePressUntilRelease_ = true;
@@ -214,6 +229,17 @@ void ShellController::refreshHoverAfterGeometryChange(bool pressed) {
     }
 }
 
+bool ShellController::gazeTrackingEnabled() const {
+    return window_ && window_->isVisible() && !suppressed_
+        && state_->section() == QStringLiteral("home") && state_->eyesEnabled()
+        && !state_->reducedMotion() && !state_->settingsOpen()
+        && state_->eventTitle().isEmpty();
+}
+
+void ShellController::resetGaze() {
+    if (gaze_.reset()) emit gazeChanged();
+}
+
 void ShellController::poll() {
     if (!window_) return;
     const auto now = clock_.elapsed();
@@ -226,6 +252,7 @@ void ShellController::poll() {
 #endif
     }
     if (!window_->isVisible() || suppressed_) {
+        resetGaze();
         interaction_.suspend();
         wasPressed_ = false;
         ignorePressUntilRelease_ = true;
@@ -234,7 +261,17 @@ void ShellController::poll() {
     }
     const qreal width = window_->property("shellWidth").toReal();
     const qreal height = window_->property("shellHeight").toReal();
-    const QPointF cursor = QCursor::pos() - window_->position() - QPointF(window_->property("shellX").toReal(), 16);
+    const QPointF globalCursor = QCursor::pos();
+    const QPointF shellOrigin = QPointF(window_->position()) + QPointF(window_->property("shellX").toReal(), 16);
+    const QPointF cursor = globalCursor - shellOrigin;
+    // Independent of edge springs and their nearby early return. Track both
+    // compact and expanded Home, using the selected island monitor's scale.
+    if (gazeTrackingEnabled()) {
+        const auto *screen = window_->screen();
+        const QSizeF screenSize = screen ? QSizeF(screen->geometry().size()) : QSizeF(1920, 1080);
+        if (gaze_.sample(globalCursor, shellOrigin + QPointF(width / 2, height / 2), screenSize))
+            emit gazeChanged();
+    } else resetGaze();
     const QRectF body(0, 0, width, height);
     QPainterPath target;
     const qreal grace = state_->expanded() ? 14 : 0;

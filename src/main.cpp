@@ -79,7 +79,7 @@ int main(int argc, char *argv[]) {
     parser.addOption({"settings", "Use a separate settings file (development).", "file"});
     parser.addOption({"expanded", "Open the expanded panel."});
     parser.addOption({"pin", "Keep the expanded panel open."});
-    parser.addOption({"section", "Open time, media or devices (legacy: clock, timer, music, volume).", "id"});
+    parser.addOption({"section", "Open home, time, media or devices (legacy: clock, timer, music, volume).", "id"});
     parser.addOption({"theme", "Use dark or light theme.", "theme"});
     parser.addOption({"smoke-test", "Load QML and exit automatically."});
     parser.addOption({"inspect-ui", "Expose a normal taskbar window for UI inspection (development)."});

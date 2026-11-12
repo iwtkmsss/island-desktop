@@ -10,6 +10,27 @@
 class StateTest : public QObject {
     Q_OBJECT
 private slots:
+    void homePersistsAndKeepsItsPlaceThroughEvents() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("settings.ini");
+        {
+            AppState state(path);
+            QCOMPARE(state.section(), "home");
+            state.setSection("media");
+            state.setSection("home");
+            state.setExpanded(true);
+            state.setExpanded(false);
+            state.showVolumeEvent(30, false);
+            QCOMPARE(state.section(), "home");
+            state.dismissEvent();
+            QCOMPARE(state.section(), "home");
+        }
+        AppState restored(path);
+        QCOMPARE(restored.section(), "home");
+        restored.setSection("devices");
+        restored.setSection("clock");
+        QCOMPARE(restored.section(), "time");
+    }
     void eyesChoicePersistsWithoutChangingContext() {
         QTemporaryDir dir;
         const auto path = dir.filePath("settings.ini");
@@ -142,7 +163,7 @@ private slots:
         }
         AppState restored(path);
         QCOMPARE(restored.timeView(), "timer");
-        QCOMPARE(restored.section(), "time");
+        QCOMPARE(restored.section(), "home"); // Time-view choice does not leave Home.
     }
     void soundSectionPersistsWithoutPersistingFlyouts() {
         QTemporaryDir dir;
@@ -300,12 +321,12 @@ private slots:
           file.setValue("ui/theme", "purple");
           file.setValue("timer/minutes", -42); }
         AppState state(path);
-        QCOMPARE(state.section(), "time");
+        QCOMPARE(state.section(), "home");
         QCOMPARE(state.theme(), "dark");
         QCOMPARE(state.timerMinutes(), 25);
         state.setSection("unknown");
         state.setTheme("unknown");
-        QCOMPARE(state.section(), "time");
+        QCOMPARE(state.section(), "home");
         QCOMPARE(state.theme(), "dark");
     }
     void devicesSectionPersistsAndSurvivesTemporaryEvent() {

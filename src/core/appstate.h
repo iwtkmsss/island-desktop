@@ -99,7 +99,7 @@ private:
     void removeTimerEvents();
     void postTimerFinished();
     void applyEventChange(bool currentChanged, int pendingBefore);
-    QString section_ = "time";
+    QString section_ = "home";
     QString timeView_ = "clock";
     QString theme_ = "dark";
     bool reducedMotion_ = false;

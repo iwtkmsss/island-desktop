@@ -169,14 +169,14 @@ Item {
             y: glowRow.y + glowRow.implicitHeight + 18; width: parent.width
             Column {
                 Layout.fillWidth: true; spacing: 5
-                Text { text: "Очі в капсулі"; color: page.colors.text; font.pixelSize: 13 }
-                Text { text: "Стежать за курсором і засинають у тиші"; color: page.colors.muted; font.pixelSize: 11 }
+                Text { text: "Очі на головній"; color: page.colors.text; font.pixelSize: 13 }
+                Text { text: "Стежать за курсором по всьому екрану"; color: page.colors.muted; font.pixelSize: 11 }
             }
             Switch {
                 id: eyesSwitch
                 objectName: "eyesToggle"
                 checked: page.model.eyesEnabled
-                Accessible.name: "Очі в капсулі"
+                Accessible.name: "Очі на головній"
                 onToggled: page.model.eyesEnabled = checked
                 onActiveFocusChanged: if (activeFocus) page.reveal(eyesRow)
                 indicator: Rectangle {
