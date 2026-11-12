@@ -1,0 +1,277 @@
+#include "shellcontroller.h"
+#include "appstate.h"
+#include <QCursor>
+#include <QCoreApplication>
+#include <QDebug>
+#include <QGuiApplication>
+#include <QMouseEvent>
+#include <QPainterPath>
+#include <QQuickWindow>
+#ifdef Q_OS_WIN
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <cwchar>
+#endif
+
+namespace {
+#ifdef Q_OS_WIN
+constexpr wchar_t suppressionOwnerProperty[] = L"IslandDesktop.InputSuppressionOwner";
+
+// Adapted from IsForegroundFullscreen in the supplied mod 1.4.0, lines 2108–2147.
+// Copyright (c) 2026 devcode90, MIT; third_party/dynamic-island/LICENSE.
+// Restrict to the island's own monitor and ignore minimized/system/own windows.
+bool foregroundFillsIslandMonitor(QQuickWindow *island) {
+    if (!island) return false;
+    const auto target = reinterpret_cast<HWND>(island->winId());
+    const HWND foreground = GetForegroundWindow();
+    if (!foreground || foreground == target || foreground == GetDesktopWindow() || foreground == GetShellWindow()) return false;
+    DWORD processId = 0;
+    GetWindowThreadProcessId(foreground, &processId);
+    if (!processId || processId == GetCurrentProcessId()) return false;
+    if (!IsWindowVisible(foreground) || IsIconic(foreground)) return false;
+
+    wchar_t className[256]{};
+    GetClassNameW(foreground, className, 256);
+    if (std::wcscmp(className, L"WorkerW") == 0 || std::wcscmp(className, L"Progman") == 0
+        || std::wcscmp(className, L"Shell_TrayWnd") == 0 || std::wcscmp(className, L"Shell_SecondaryTrayWnd") == 0) return false;
+
+    const HMONITOR islandMonitor = MonitorFromWindow(target, MONITOR_DEFAULTTONULL);
+    const HMONITOR foregroundMonitor = MonitorFromWindow(foreground, MONITOR_DEFAULTTONULL);
+    if (!islandMonitor || foregroundMonitor != islandMonitor) return false;
+    MONITORINFO info{};
+    info.cbSize = sizeof(info);
+    RECT client{};
+    if (!GetMonitorInfoW(islandMonitor, &info) || !GetClientRect(foreground, &client)) return false;
+    POINT topLeft{client.left, client.top}, bottomRight{client.right, client.bottom};
+    if (!ClientToScreen(foreground, &topLeft) || !ClientToScreen(foreground, &bottomRight)) return false;
+    ShellFullscreenCandidate candidate;
+    candidate.visible = true;
+    candidate.sameMonitor = true;
+    candidate.client = {topLeft.x, topLeft.y, bottomRight.x, bottomRight.y};
+    candidate.monitor = {info.rcMonitor.left, info.rcMonitor.top, info.rcMonitor.right, info.rcMonitor.bottom};
+    return candidate.qualifies();
+}
+#endif
+}
+
+ShellController::ShellController(AppState *state, QObject *parent) : QObject(parent), state_(state) {
+    clock_.start();
+    connect(&ticker_, &QTimer::timeout, this, &ShellController::poll);
+    connect(state_, &AppState::expandedChanged, this, [this] {
+        if (!state_->expanded()) {
+            interaction_.suppressUntilLeave();
+            setPinned(false);
+            ignorePressUntilRelease_ = false;
+        } else {
+            // Hover intent already proved intent. The longer grace is only for
+            // explicit opens from the tray/keyboard, while the cursor travels.
+            holdUntil_ = hoverOpening_ ? 0 : clock_.elapsed() + 1800;
+            ignorePressUntilRelease_ = !hoverOpening_;
+        }
+    });
+}
+ShellController::~ShellController() { setNativeInputSuppressed(false); }
+void ShellController::attach(QQuickWindow *window) {
+    window_ = window;
+    connect(window, &QWindow::xChanged, this, [this] { geometryChanged_ = true; });
+    connect(window, &QWindow::yChanged, this, [this] { geometryChanged_ = true; });
+    connect(window, &QWindow::widthChanged, this, [this] { geometryChanged_ = true; });
+    connect(window, &QWindow::heightChanged, this, [this] { geometryChanged_ = true; });
+    connect(window, &QObject::destroyed, this, [this] {
+        window_ = nullptr;
+        ticker_.stop();
+        setNativeInputSuppressed(false);
+    });
+    holdUntil_ = clock_.elapsed() + 1800;
+    ignorePressUntilRelease_ = state_->expanded();
+    ticker_.start(50);
+}
+void ShellController::setPinned(bool pinned) {
+    if (pinned_ == pinned) return;
+    pinned_ = pinned;
+    if (pinned) state_->setExpanded(true);
+    emit pinnedChanged();
+}
+void ShellController::open() {
+    interaction_.suspend();
+    holdUntil_ = clock_.elapsed() + 1800;
+    ignorePressUntilRelease_ = true;
+    state_->setExpanded(true);
+}
+void ShellController::close() { state_->setExpanded(false); }
+
+void ShellController::setSuppressed(bool suppressed) {
+    if (suppressed_ == suppressed) {
+        // A native window may be recreated while the application stays running.
+        if (suppressed) setNativeInputSuppressed(true);
+        return;
+    }
+    suppressed_ = suppressed;
+    interaction_.suspend();
+    wasPressed_ = false;
+    ignorePressUntilRelease_ = true;
+    if (!suppressed && state_->expanded()) holdUntil_ = clock_.elapsed() + 1800;
+    proximity_.reset(0);
+    geometryChanged_ = true;
+    setNativeInputSuppressed(suppressed);
+    emit pointerChanged();
+    emit suppressionChanged();
+}
+
+void ShellController::setNativeInputSuppressed(bool suppressed) {
+#ifdef Q_OS_WIN
+    const auto currentId = window_ ? static_cast<quintptr>(window_->winId()) : 0;
+    const auto owner = reinterpret_cast<HANDLE>(this);
+    if (suppressedWindowId_ && (!suppressed || currentId != suppressedWindowId_
+        || GetPropW(reinterpret_cast<HWND>(suppressedWindowId_), suppressionOwnerProperty) != owner)) {
+        const auto previous = reinterpret_cast<HWND>(suppressedWindowId_);
+        auto region = reinterpret_cast<HRGN>(savedWindowRegion_);
+        // Native handles may be reused after Qt recreates a window. A property
+        // belongs to that native window's lifetime, so never restore onto a
+        // different window that happens to receive the same numeric handle.
+        if (GetPropW(previous, suppressionOwnerProperty) == owner) {
+            // Restore only our style bit, preserving other Qt/native changes.
+            const LONG_PTR style = GetWindowLongPtrW(previous, GWL_EXSTYLE);
+            const LONG_PTR restored = wasNativeInputTransparent_ ? style | WS_EX_TRANSPARENT : style & ~static_cast<LONG_PTR>(WS_EX_TRANSPARENT);
+            if (restored != style) SetWindowLongPtrW(previous, GWL_EXSTYLE, restored);
+            if (SetWindowRgn(previous, region, TRUE)) region = nullptr; // Windows owns it after success.
+            else if (!SetWindowRgn(previous, nullptr, TRUE)) qWarning("Could not restore the island's native input region.");
+            RemovePropW(previous, suppressionOwnerProperty);
+            SetWindowPos(previous, nullptr, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+        }
+        if (region) DeleteObject(region);
+        savedWindowRegion_ = suppressedWindowId_ = 0;
+    }
+    if (!suppressed || !currentId || suppressedWindowId_ == currentId) return;
+    const auto target = reinterpret_cast<HWND>(currentId);
+    const LONG_PTR style = GetWindowLongPtrW(target, GWL_EXSTYLE);
+    auto savedRegion = CreateRectRgn(0, 0, 0, 0);
+    if (!savedRegion) return;
+    if (GetWindowRgn(target, savedRegion) == ERROR) { DeleteObject(savedRegion); savedRegion = nullptr; }
+    if (!SetPropW(target, suppressionOwnerProperty, owner)) {
+        if (savedRegion) DeleteObject(savedRegion);
+        qWarning("Could not mark the island's native input region for restoration.");
+        return;
+    }
+    auto empty = CreateRectRgn(0, 0, 0, 0);
+    if (!empty || !SetWindowRgn(target, empty, TRUE)) {
+        if (empty) DeleteObject(empty);
+        if (savedRegion) DeleteObject(savedRegion);
+        RemovePropW(target, suppressionOwnerProperty);
+        qWarning("Could not suppress the island's native input region.");
+        return;
+    }
+    // An empty native region removes drawing and hit testing independently of
+    // alpha/Qt rendering, and leaves QWindow visibility/manual hide untouched.
+    // WS_EX_TRANSPARENT is a second safeguard for the layered overlay window.
+    SetWindowLongPtrW(target, GWL_EXSTYLE, style | WS_EX_TRANSPARENT);
+    SetWindowPos(target, nullptr, 0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    suppressedWindowId_ = currentId;
+    savedWindowRegion_ = reinterpret_cast<quintptr>(savedRegion);
+    wasNativeInputTransparent_ = (style & WS_EX_TRANSPARENT) != 0;
+#else
+    Q_UNUSED(suppressed)
+#endif
+}
+
+// Adapted from SetClickThrough in the supplied mod 1.4.0, lines 10226–10241.
+// Copyright (c) 2026 devcode90, MIT; third_party/dynamic-island/LICENSE.
+void ShellController::setClickThrough(bool clickThrough) {
+#ifdef Q_OS_WIN
+    if (!window_ || suppressed_ || suppressedWindowId_) return; // fullscreen suppression owns the bit
+    const auto hwnd = reinterpret_cast<HWND>(window_->winId());
+    const LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+    if (((style & WS_EX_TRANSPARENT) != 0) == clickThrough) return;
+    SetWindowLongPtrW(hwnd, GWL_EXSTYLE, clickThrough ? style | WS_EX_TRANSPARENT : style & ~static_cast<LONG_PTR>(WS_EX_TRANSPARENT));
+    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+#else
+    Q_UNUSED(clickThrough)
+#endif
+}
+
+void ShellController::refreshHoverAfterGeometryChange(bool pressed) {
+    if (!geometryChanged_ || pressed || !window_ || suppressed_ || !window_->isVisible()) return;
+    geometryChanged_ = false;
+    const QPointF global = QCursor::pos();
+    const QPointF local = global - window_->position();
+    // A stationary OS pointer does not necessarily produce a move when the
+    // centred window resizes under it. Refresh Qt's own hover hit testing only;
+    // this neither moves the OS cursor nor activates a window or sends a click.
+    if (QRectF(0, 0, window_->width(), window_->height()).contains(local)) {
+        QMouseEvent event(QEvent::MouseMove, local, local, global, Qt::NoButton,
+            Qt::NoButton, QGuiApplication::keyboardModifiers(), Qt::MouseEventSynthesizedByApplication);
+        QCoreApplication::sendEvent(window_, &event);
+    } else {
+        QEvent event(QEvent::Leave);
+        QCoreApplication::sendEvent(window_, &event);
+    }
+}
+
+void ShellController::poll() {
+    if (!window_) return;
+    const auto now = clock_.elapsed();
+    const float dt = static_cast<float>(now - lastTick_) / 1000;
+    lastTick_ = now;
+    if (now >= nextFullscreenCheck_) {
+        nextFullscreenCheck_ = now + 400;
+#ifdef Q_OS_WIN
+        setSuppressed(foregroundFillsIslandMonitor(window_));
+#endif
+    }
+    if (!window_->isVisible() || suppressed_) {
+        interaction_.suspend();
+        wasPressed_ = false;
+        ignorePressUntilRelease_ = true;
+        if (ticker_.interval() != 150) ticker_.setInterval(150);
+        return;
+    }
+    const qreal width = window_->property("shellWidth").toReal();
+    const qreal height = window_->property("shellHeight").toReal();
+    const QPointF cursor = QCursor::pos() - window_->position() - QPointF(window_->property("shellX").toReal(), 16);
+    const QRectF body(0, 0, width, height);
+    QPainterPath target;
+    const qreal grace = state_->expanded() ? 14 : 0;
+    target.addRoundedRect(body.adjusted(-grace, -grace, grace, grace), 24, 24);
+    const bool inside = target.contains(cursor);
+    const bool nearby = body.adjusted(-24, -24, 24, 24).contains(cursor);
+    bool pressed = QGuiApplication::mouseButtons() != Qt::NoButton;
+#ifdef Q_OS_WIN
+    pressed = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) || (GetAsyncKeyState(VK_RBUTTON) & 0x8000);
+#endif
+    // The frame is fixed at the expanded size; only the visible shell takes input.
+    setClickThrough(!body.adjusted(-2, -2, 2, 2).contains(cursor));
+    if (!pressed) ignorePressUntilRelease_ = false;
+    if (pressed && !wasPressed_ && !ignorePressUntilRelease_ && !inside && state_->expanded() && !pinned_) close();
+    wasPressed_ = pressed;
+    refreshHoverAfterGeometryChange(pressed);
+    const auto action = interaction_.update({inside, state_->expanded(), pinned_ || now < holdUntil_, pressed}, now);
+    if (action == ShellInteraction::Action::Open) {
+        hoverOpening_ = true;
+        state_->setExpanded(true);
+        hoverOpening_ = false;
+    }
+    else if (action == ShellInteraction::Action::Close) state_->setExpanded(false);
+
+    x_.target = static_cast<float>(std::clamp(cursor.x(), -24.0, width + 24));
+    y_.target = static_cast<float>(std::clamp(cursor.y(), -24.0, height + 24));
+    proximity_.target = nearby && !state_->reducedMotion() ? 1 : 0;
+    const auto oldX = x_.value, oldY = y_.value, oldProximity = proximity_.value;
+    if (!nearby && proximity_.value == 0) {
+        x_.reset(x_.target); y_.reset(y_.target);
+        if (ticker_.interval() != 80) ticker_.setInterval(80);
+        return;
+    }
+    if (state_->reducedMotion()) { x_.reset(x_.target); y_.reset(y_.target); proximity_.reset(0); }
+    else { x_.step(dt, 360, 30); y_.step(dt, 360, 30); proximity_.step(dt); }
+    if (std::abs(oldX - x_.value) > 0.05 || std::abs(oldY - y_.value) > 0.05 || std::abs(oldProximity - proximity_.value) > 0.002)
+        emit pointerChanged();
+    const int interval = nearby || proximity_.value > 0.01 ? 16 : 80;
+    if (ticker_.interval() != interval) ticker_.setInterval(interval);
+}

@@ -1,0 +1,63 @@
+{
+  "recorded_date": "2026-11-11",
+  "timezone": "Europe/Kiev",
+  "purpose": "User-provided source and video reference; planning stage only.",
+  "assets": [
+    {
+      "path": "references/frames/eyes-motion.png",
+      "bytes": 1439664,
+      "sha256": "e15f88fad05c0d8eb570152a89e8dbd0c4462376a10ac389934ea51c66008bf1",
+      "width": 3392,
+      "height": 1856
+    },
+    {
+      "path": "references/frames/media-motion.png",
+      "bytes": 3917997,
+      "sha256": "1c9c5d5e4d2103f248d271976a2b25e92c111f10f655cf776883ae17abcffd57",
+      "width": 3392,
+      "height": 1856
+    },
+    {
+      "path": "references/frames/overview-01.png",
+      "bytes": 2698227,
+      "sha256": "34a86ae410b2956e09d3ede16f78d2f52561d930ea0e2495ee9938e5151dbc70",
+      "width": 2560,
+      "height": 1050
+    },
+    {
+      "path": "references/frames/overview-02.png",
+      "bytes": 2897136,
+      "sha256": "8a44c2a7c732a45a7f3868c7f9e5aff8a91960dffcbb6f2719c6f57526b7dbcd",
+      "width": 2560,
+      "height": 1050
+    },
+    {
+      "path": "references/frames/overview-03.png",
+      "bytes": 1410713,
+      "sha256": "6d1144c793e6c3d0d63c845b261c03904266659717b3d1a0d85ef70879582b71",
+      "width": 2560,
+      "height": 1050
+    },
+    {
+      "path": "references/frames/settings.png",
+      "bytes": 352004,
+      "sha256": "0d035a3b751d3b876f54ad344b0903d5c3535fcee332e0d133d07269dd3b6369",
+      "width": 848,
+      "height": 464
+    },
+    {
+      "path": "references/original-mod/dynamic-island-for-windows.wh.cpp",
+      "bytes": 1075878,
+      "sha256": "79fa0c5a4285f6673580899cff8ee46c6154b020d9e53b15eb28d330f5bf9ec2",
+      "original_path": "C:\\Users\\User\\.codex\\attachments\\db48bdd2-aa37-4806-9c58-44255572cbe1\\Вставлений текст.txt",
+      "verified_identical": true
+    },
+    {
+      "path": "references/video/island-reference.mp4",
+      "bytes": 33312818,
+      "sha256": "bcdf04590ab8e61753321abe71c2ec70ffcc61201809cc7f6161fca65e6367c3",
+      "original_path": "C:\\Users\\User\\Downloads\\v14044g50000dbpkp3vog65uo2qkqpd0.mp4",
+      "verified_identical": true
+    }
+  ]
+}

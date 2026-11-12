@@ -1,0 +1,97 @@
+#pragma once
+
+#include "countdown.h"
+#include <QDateTime>
+#include <QElapsedTimer>
+#include <QObject>
+#include <QSettings>
+#include <QTimer>
+
+class AppState final : public QObject {
+    Q_OBJECT
+    Q_PROPERTY(QString section READ section WRITE setSection NOTIFY sectionChanged)
+    Q_PROPERTY(QString theme READ theme WRITE setTheme NOTIFY themeChanged)
+    Q_PROPERTY(bool reducedMotion READ reducedMotion WRITE setReducedMotion NOTIFY reducedMotionChanged)
+    Q_PROPERTY(bool expanded READ expanded WRITE setExpanded NOTIFY expandedChanged)
+    Q_PROPERTY(bool settingsOpen READ settingsOpen WRITE setSettingsOpen NOTIFY settingsOpenChanged)
+    Q_PROPERTY(QString clockTime READ clockTime NOTIFY clockChanged)
+    Q_PROPERTY(QString clockSeconds READ clockSeconds NOTIFY clockChanged)
+    Q_PROPERTY(QString clockDate READ clockDate NOTIFY clockChanged)
+    Q_PROPERTY(QString clockWeekday READ clockWeekday NOTIFY clockChanged)
+    Q_PROPERTY(QString clockWeekdayShort READ clockWeekdayShort NOTIFY clockChanged)
+    Q_PROPERTY(QString timerText READ timerText NOTIFY countdownChanged)
+    Q_PROPERTY(QString timerState READ timerState NOTIFY countdownChanged)
+    Q_PROPERTY(int timerMinutes READ timerMinutes NOTIFY countdownChanged)
+    Q_PROPERTY(double timerProgress READ timerProgress NOTIFY countdownChanged)
+    Q_PROPERTY(QString eventTitle READ eventTitle NOTIFY eventChanged)
+    Q_PROPERTY(QString eventKind READ eventKind NOTIFY eventChanged)
+    Q_PROPERTY(int eventVolume READ eventVolume NOTIFY eventChanged)
+    Q_PROPERTY(bool eventMuted READ eventMuted NOTIFY eventChanged)
+
+public:
+    explicit AppState(const QString &settingsFile, QObject *parent = nullptr);
+    QString section() const { return section_; }
+    QString theme() const { return theme_; }
+    bool reducedMotion() const { return reducedMotion_; }
+    bool expanded() const { return expanded_; }
+    bool settingsOpen() const { return settingsOpen_; }
+    QString clockTime() const { return now_.toString("HH:mm"); }
+    QString clockSeconds() const { return now_.toString("ss"); }
+    QString clockDate() const;
+    QString clockWeekday() const;
+    QString clockWeekdayShort() const;
+    QString timerText() const;
+    QString timerState() const;
+    int timerMinutes() const { return static_cast<int>(countdown_.duration() / 60000); }
+    double timerProgress() const;
+    QString eventTitle() const { return eventTitle_; }
+    QString eventKind() const { return eventKind_; }
+    int eventVolume() const { return eventVolume_; }
+    bool eventMuted() const { return eventMuted_; }
+
+    void setSection(const QString &section);
+    void setTheme(const QString &theme);
+    void setReducedMotion(bool enabled);
+    void setExpanded(bool expanded);
+    void setSettingsOpen(bool open);
+    void showTemporaryEvent(const QString &title, int durationMs = 8000);
+    void showVolumeEvent(int volume, bool muted, int durationMs = 1800);
+
+    Q_INVOKABLE void setTimerMinutes(int minutes);
+    Q_INVOKABLE void toggleTimer();
+    Q_INVOKABLE void resetTimer();
+    Q_INVOKABLE void dismissEvent();
+
+signals:
+    void sectionChanged();
+    void themeChanged();
+    void reducedMotionChanged();
+    void expandedChanged();
+    void settingsOpenChanged();
+    void clockChanged();
+    void countdownChanged();
+    void eventChanged();
+    void timerFinished();
+
+private:
+    void persist(const QString &key, const QVariant &value);
+    void tick();
+    void updateTicker();
+    QSettings settings_;
+    QString section_ = "clock";
+    QString theme_ = "dark";
+    bool reducedMotion_ = false;
+    bool expanded_ = false;
+    bool settingsOpen_ = false;
+    QDateTime now_;
+    QElapsedTimer monotonic_;
+    QTimer clockTicker_;
+    QTimer activityTicker_;
+    QTimer eventExpiry_;
+    Countdown countdown_;
+    QString eventTitle_;
+    QString eventKind_;
+    int eventVolume_ = 0;
+    bool eventMuted_ = false;
+};
+

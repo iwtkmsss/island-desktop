@@ -1,0 +1,19 @@
+.tools/
+build/
+dist/
+artifacts/
+CMakeUserPresets.json
+*.user
+aqtinstall.log
+
+
+# Чужий відеореференс і кадри з нього: лишаються локально
+references/video/
+references/frames/
+
+# Локальні налаштування асистента
+.claude/settings.local.json
+
+# Робоча документація й журнали чатів: лишаються локально
+PROJECT_CONTEXT.md
+docs/
