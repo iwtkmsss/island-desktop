@@ -55,6 +55,10 @@ Window {
     property real glowLevel: glowActive ? 1 : 0
     Behavior on glowLevel { NumberAnimation { duration: root.model.reducedMotion ? 0 : 450; easing.type: Easing.OutCubic } }
     // The raw level changes every audio frame; ease it so the glow swells instead of flickering.
+    // Overall loudness of the local signal (not normalised like the bands), eased.
+    // It scales the hills so a calm track and a loud, bass-heavy one look different.
+    property real loudness: flowing ? Math.min(1, audio.level / 0.45) : 0
+    Behavior on loudness { SmoothedAnimation { velocity: 2.2; duration: 260 } }
     property real glowPulse: flowing ? 0.78 + 0.22 * Math.min(1, audio.level * 1.6) : 0.85
     Behavior on glowPulse { SmoothedAnimation { velocity: 0.35; duration: 400 } }
     Binding {
@@ -115,7 +119,7 @@ Window {
             pointerX: root.interaction.pointerX; pointerY: root.interaction.pointerY
             proximity: root.interaction.proximity
             phase: root.wavePhase
-            wave: root.flowing ? Math.min(11, 7 + root.audio.level * 10) : 0
+            wave: root.flowing ? 5 + 11 * Math.pow(root.loudness, 0.9) : 0
             bands: root.audio.bands
             glowColor: root.glowTint
             glowStrength: root.glowLevel * root.glowPulse

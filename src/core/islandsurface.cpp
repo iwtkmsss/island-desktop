@@ -38,6 +38,11 @@ void IslandSurface::paint(QPainter *painter) {
         smoothedBands_[i] += (target - smoothedBands_[i]) * (target > smoothedBands_[i] ? 0.30 : 0.12);
     }
     for (int i = bandCount; i < static_cast<int>(smoothedBands_.size()); ++i) smoothedBands_[i] = 0;
+    // Bass drives the whole edge: a kick lifts every hill, not only the left ones.
+    const double bass = bandCount > 1 ? (smoothedBands_[0] + smoothedBands_[1]) / 2 : bandCount == 1 ? smoothedBands_[0] : 0;
+    // Players level out overall loudness, so bass share is what tells a calm
+    // track from a heavy one: weak bass keeps the hills low, a kick lifts them.
+    const double kick = 0.45 + 1.1 * std::pow(bass, 1.5);
     QPainterPath path;
     constexpr int samples = 200;
     const QPointF pointer(pointerX + margin, pointerY + margin);
@@ -70,9 +75,10 @@ void IslandSurface::paint(QPainter *painter) {
             // to keep separate hills instead of one flat bulge. A travelling ripple,
             // always positive, adds motion without dipping into the panel. Capped
             // to stay inside the paint margin together with the glow stroke.
-            const double shaped = std::pow(magnitude, 1.7);
+            // Low frequencies sit on the left and get taller hills than the highs.
+            const double shaped = std::pow(magnitude, 1.2) * (1.2 - 0.4 * u);
             const double ripple = 0.72 + 0.28 * std::sin(u * 6 * std::numbers::pi + phase);
-            p.ry() += std::min(9.0, wave * envelope * shaped * ripple);
+            p.ry() += std::min(11.0, wave * kick * envelope * shaped * ripple);
         }
         if (i == 0) path.moveTo(p); else path.lineTo(p);
     }
