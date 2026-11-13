@@ -75,20 +75,22 @@ endif()
 if(BUILD_TESTING AND WIN32)
     qt_add_executable(windows_taskbar_tests tests/windows_taskbar_test.cpp
         src/platform/taskbarcontroller.h src/platform/windows/taskbarcontroller.cpp
-        src/platform/windows/taskbarguardian.cpp src/platform/windows/taskbarguardian.h)
+        src/platform/windows/taskbarguardian.cpp src/platform/windows/taskbarguardian.h
+        src/platform/windows/taskbarworkarea.cpp src/platform/windows/taskbarworkarea.h)
     set_target_properties(windows_taskbar_tests PROPERTIES WIN32_EXECUTABLE FALSE)
     target_include_directories(windows_taskbar_tests PRIVATE src/platform src/platform/windows)
     target_compile_definitions(windows_taskbar_tests PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
-    target_link_libraries(windows_taskbar_tests PRIVATE Qt6::Core Qt6::Test user32)
+    target_link_libraries(windows_taskbar_tests PRIVATE Qt6::Core Qt6::Test user32 dwmapi wtsapi32)
     target_compile_options(windows_taskbar_tests PRIVATE /W4 /utf-8)
     add_test(NAME island_windows_taskbar COMMAND windows_taskbar_tests -o windows_taskbar-results.txt,txt)
     set_tests_properties(island_windows_taskbar PROPERTIES TIMEOUT 40)
     qt_add_executable(windows_shell_tests tests/windows_shell_test.cpp
-        src/platform/windows/shellcontroller.cpp src/platform/shellgesture.cpp src/platform/shellcontroller.h)
+        src/platform/windows/shellcontroller.cpp src/platform/shellgesture.cpp src/platform/shellcontroller.h
+        src/platform/windows/taskbarworkarea.cpp src/platform/windows/taskbarworkarea.h)
     set_target_properties(windows_shell_tests PROPERTIES WIN32_EXECUTABLE FALSE)
     target_include_directories(windows_shell_tests PRIVATE src/platform src/core)
     target_compile_definitions(windows_shell_tests PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
-    target_link_libraries(windows_shell_tests PRIVATE island_core Qt6::Quick Qt6::Test user32 gdi32)
+    target_link_libraries(windows_shell_tests PRIVATE island_core Qt6::Quick Qt6::Test user32 gdi32 dwmapi wtsapi32)
     target_compile_options(windows_shell_tests PRIVATE /W4 /utf-8)
     add_test(NAME island_windows_shell COMMAND windows_shell_tests -o windows_shell-results.txt,txt)
     # Uses a private window class with forwarding and announcing off: the real

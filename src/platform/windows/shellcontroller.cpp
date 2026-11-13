@@ -1,6 +1,7 @@
 #include "shellcontroller.h"
 #include "appstate.h"
 #include "islandshape.h"
+#include "taskbarworkarea.h"
 #include <QCursor>
 #include <QCoreApplication>
 #include <QDebug>
@@ -92,6 +93,7 @@ bool foregroundFillsIslandMonitor(QQuickWindow *island) {
     candidate.monitor = {info.rcMonitor.left, info.rcMonitor.top, info.rcMonitor.right, info.rcMonitor.bottom};
     const auto style = GetWindowLongPtrW(foreground, GWL_STYLE);
     candidate.maximized = IsZoomed(foreground) != FALSE;
+    candidate.knownWindowedMaximized = TaskbarNative::isKnownWindowedMaximized(foreground);
     candidate.decoratedResizable = (style & (WS_CAPTION | WS_THICKFRAME)) == (WS_CAPTION | WS_THICKFRAME);
     RECT outer{};
     if (GetWindowRect(foreground, &outer)) candidate.outer = {outer.left, outer.top, outer.right, outer.bottom};

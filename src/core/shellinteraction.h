@@ -13,6 +13,7 @@ struct ShellFullscreenCandidate {
     bool sameMonitor = false;
     bool maximized = false;
     bool decoratedResizable = false;
+    bool knownWindowedMaximized = false;
     bool normalMaximized() const {
         return maximized && decoratedResizable
             && outer.right > outer.left && outer.bottom > outer.top
@@ -21,7 +22,7 @@ struct ShellFullscreenCandidate {
     }
     bool qualifies() const {
         constexpr long tolerance = 1;
-        return visible && !minimized && !belongsToUs && !desktopSurface && sameMonitor && !normalMaximized()
+        return visible && !minimized && !belongsToUs && !desktopSurface && sameMonitor && !normalMaximized() && !knownWindowedMaximized
             && client.right > client.left && client.bottom > client.top
             && monitor.right > monitor.left && monitor.bottom > monitor.top
             && client.left <= monitor.left + tolerance && client.top <= monitor.top + tolerance

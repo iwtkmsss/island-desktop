@@ -59,6 +59,10 @@ int main() {
             expect(candidate.qualifies(), "A fullscreen presentation retaining decoration styles is not a normal maximized window.");
             candidate.maximized = true; candidate.outer = candidate.monitor;
             expect(candidate.qualifies(), "Fullscreen with exact monitor outer bounds remains fullscreen even when maximized and decorated.");
+            candidate.knownWindowedMaximized = true;
+            expect(!candidate.qualifies(), "A previously windowed maximized app expanded by taskbar removal is not fullscreen.");
+            candidate.knownWindowedMaximized = false;
+            expect(candidate.qualifies(), "A fullscreen transition that loses windowed recognition still suppresses normally.");
             ++scenarios;
         }
         {
