@@ -1,5 +1,17 @@
 # Сторонній код
 
+## MinHook — ізольований Windows-прототип
+
+Ізольований прототип у `src/platform/windows/taskbarprototype/` використовує MinHook v1.3.4, commit `c3fcafdc10146beb5919319d0683e44e3c30d537`:
+https://github.com/TsudaKageyu/minhook
+
+Copyright (C) 2009–2017 Tsuda Kageyu. BSD 2-Clause; включені частини HDE мають власні повідомлення про авторство. Повні умови збережено у `src/platform/windows/taskbarprototype/vendor/minhook/LICENSE.txt` і заголовках вихідних файлів. Ця залежність не підключена до основного Island Desktop.
+
+Досліджений референс: m417z, **Taskbar auto-hide fine tuning**, v2.3 (GPLv3):
+https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-auto-hide-keyboard-only.wh.cpp
+
+Його реалізацію не включено до прототипу. Власна інтеграція використовує імена системних символів для перевірки ABI; встановлення Windhawk не потрібне.
+
 ## Dynamic Island for Windows
 
 Copyright (c) 2026 devcode90. MIT License.

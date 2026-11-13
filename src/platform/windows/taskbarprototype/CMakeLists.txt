@@ -1,0 +1,22 @@
+cmake_minimum_required(VERSION 3.24)
+project(IslandTaskbarPrototype LANGUAGES C CXX)
+if(NOT WIN32 OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+  message(FATAL_ERROR "This isolated prototype supports Windows x64 only")
+endif()
+set(CMAKE_CXX_STANDARD 20)
+add_compile_definitions(UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+add_library(prototype_minhook STATIC vendor/minhook/src/buffer.c vendor/minhook/src/hook.c
+  vendor/minhook/src/trampoline.c vendor/minhook/src/hde/hde64.c)
+target_include_directories(prototype_minhook PUBLIC vendor/minhook/include)
+add_library(IslandTaskbarPrototype SHARED hook.cpp)
+target_link_libraries(IslandTaskbarPrototype PRIVATE prototype_minhook advapi32 dwmapi)
+add_executable(taskbar-prototype host.cpp)
+target_link_libraries(taskbar-prototype PRIVATE dbghelp advapi32)
+add_executable(windows_taskbar_prototype_test ../../../../tests/windows_taskbar_prototype_test.cpp)
+target_include_directories(windows_taskbar_prototype_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(windows_taskbar_prototype_test PRIVATE dwmapi)
+add_dependencies(windows_taskbar_prototype_test IslandTaskbarPrototype)
+enable_testing()
+add_test(NAME windows_taskbar_prototype COMMAND windows_taskbar_prototype_test)
+
+

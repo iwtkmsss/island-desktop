@@ -1,0 +1,1 @@
+MinHook v1.3.4; https://github.com/TsudaKageyu/minhook; commit c3fcafdc10146beb5919319d0683e44e3c30d537; files unchanged. BSD-2-Clause and bundled HDE license in source headers.
