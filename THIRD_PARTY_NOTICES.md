@@ -16,6 +16,8 @@ Copyright (c) 2026 devcode90. MIT License.
 - **Bluetooth:** `ClassifyBluetoothDevice` (рядки 5354–5384), `TryReadClassicBluetoothBatteryPercent` з властивістю `PKEY_Bluetooth_Battery` (рядки 5465–5539) і схема класичних та BLE-пристроїв з `BluetoothThreadProc` (рядки 5712–5793) у `src/platform/windows/bluetoothcontroller.cpp`. Збережено визначення типу за назвою, читання батареї з вузлів BTHENUM через SetupAPI та окреме перерахування класичних і BLE-пристроїв. Замість відокремленого потоку й подій DeviceWatcher використано керований потік Qt із повторним скануванням, скасуванням і нумерацією результатів; вузли батареї перераховуються один раз за скан; тип за Class of Device винесено до `src/core/devicetracker.h`. Читання батареї через GATT не використовується.
 - **Повноекранні програми:** `IsForegroundFullscreen` (рядки 2108–2147) у `src/platform/windows/shellcontroller.cpp`. Перевірку обмежено монітором острівця; виключено власні, системні та згорнуті вікна.
 
+- **CPU/RAM:** вимірювання через `GetSystemTimes` і `GlobalMemoryStatusEx` (рядки 8293–8299 і 8326–8346) у `src/platform/windows/desktopcontroller.cpp`. Формат рядка й таймер узгоджено з Linux-панеллю.
+
 Номери рядків стосуються саме незмінної наданої копії. Нові адаптації також поширюються з наведеним повідомленням про авторське право та ліцензією MIT.
 
 Ліцензійний текст upstream, отриманий 11.11.2026: `third_party/dynamic-island/LICENSE`. Точна відповідність наданого великого файлу окремому upstream-коміту не встановлена.
@@ -23,6 +25,10 @@ Copyright (c) 2026 devcode90. MIT License.
 ## Qt
 
 Використовуються динамічні бібліотеки Qt 6.8.3. Їхні ліцензії й відомості про сторонні компоненти: https://doc.qt.io/qt-6.8/licenses-used-in-qt.html
+
+## Трей Windows
+
+`src/platform/windows/trayhost.cpp` — власна реалізація загальновідомого протоколу `Shell_NotifyIcon` (вікно `Shell_TrayWnd`, `WM_COPYDATA`), який так само використовують альтернативні оболонки ManagedShell і RetroBar (https://github.com/cairoshell/ManagedShell). Код цих проєктів не копіювався.
 
 ## KDE Frameworks / Plasma (Linux desktop panel)
 
