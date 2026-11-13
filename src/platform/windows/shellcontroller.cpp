@@ -9,6 +9,7 @@
 #include <QPainterPath>
 #include <QQuickWindow>
 #include <QScreen>
+#include <cstdio>
 #ifdef Q_OS_WIN
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -23,6 +24,39 @@
 namespace {
 #ifdef Q_OS_WIN
 constexpr wchar_t suppressionOwnerProperty[] = L"IslandDesktop.InputSuppressionOwner";
+
+// Opt-in diagnostics cover the input path *before* expandedChanged as well as
+// synchronous native work inside a poll. Frame-only traces miss both delays.
+struct InputTrace {
+    const bool enabled = qEnvironmentVariableIsSet("ISLAND_MOTION_TRACE")
+        || qEnvironmentVariableIsSet("ISLAND_DESKTOP_TRACE");
+    bool inside = false;
+    qint64 previousPoll = 0;
+    static qint64 now() { QElapsedTimer clock; clock.start(); return clock.msecsSinceReference(); }
+};
+InputTrace &inputTrace() { static InputTrace instance; return instance; }
+
+struct PollTrace {
+    QElapsedTimer clock;
+    qint64 gap = 0, fullscreen = 0, clickThrough = 0, hover = 0, interaction = 0;
+    bool nearby = false;
+    PollTrace() {
+        auto &trace = inputTrace();
+        if (!trace.enabled) return;
+        const auto now = InputTrace::now();
+        gap = trace.previousPoll ? now - trace.previousPoll : 0;
+        trace.previousPoll = now;
+        clock.start();
+    }
+    ~PollTrace() {
+        if (!clock.isValid()) return;
+        const auto total = clock.elapsed();
+        if (total >= 8 || (nearby && gap >= 100))
+            std::fprintf(stderr, "input-trace poll at=%lldms gap=%lldms total=%lldms fullscreen=%lldms click-through=%lldms hover=%lldms interaction=%lldms\n",
+                (long long)InputTrace::now(), (long long)gap, (long long)total,
+                (long long)fullscreen, (long long)clickThrough, (long long)hover, (long long)interaction);
+    }
+};
 
 // Adapted from IsForegroundFullscreen in the supplied mod 1.4.0, lines 2108–2147.
 // Copyright (c) 2026 devcode90, MIT; third_party/dynamic-island/LICENSE.
@@ -56,12 +90,39 @@ bool foregroundFillsIslandMonitor(QQuickWindow *island) {
     candidate.sameMonitor = true;
     candidate.client = {topLeft.x, topLeft.y, bottomRight.x, bottomRight.y};
     candidate.monitor = {info.rcMonitor.left, info.rcMonitor.top, info.rcMonitor.right, info.rcMonitor.bottom};
+    const auto style = GetWindowLongPtrW(foreground, GWL_STYLE);
+    candidate.maximized = IsZoomed(foreground) != FALSE;
+    candidate.decoratedResizable = (style & (WS_CAPTION | WS_THICKFRAME)) == (WS_CAPTION | WS_THICKFRAME);
+    RECT outer{};
+    if (GetWindowRect(foreground, &outer)) candidate.outer = {outer.left, outer.top, outer.right, outer.bottom};
+    if (inputTrace().enabled) {
+        static HWND previous = nullptr;
+        static bool previousQualifies = false;
+        if (previous != foreground || previousQualifies != candidate.qualifies()) {
+            previous = foreground;
+            previousQualifies = candidate.qualifies();
+            std::fprintf(stderr, "input-trace fullscreen at=%lldms hwnd=%llx class=%ls zoomed=%d style=%llx normal-maximized=%d qualifies=%d client=%ld,%ld,%ld,%ld outer=%ld,%ld,%ld,%ld monitor=%ld,%ld,%ld,%ld work=%ld,%ld,%ld,%ld\n",
+                (long long)InputTrace::now(), (unsigned long long)reinterpret_cast<quintptr>(foreground), className,
+                candidate.maximized, (unsigned long long)style, candidate.normalMaximized(), candidate.qualifies(),
+                topLeft.x, topLeft.y, bottomRight.x, bottomRight.y,
+                outer.left, outer.top, outer.right, outer.bottom,
+                info.rcMonitor.left, info.rcMonitor.top, info.rcMonitor.right, info.rcMonitor.bottom,
+                info.rcWork.left, info.rcWork.top, info.rcWork.right, info.rcWork.bottom);
+        }
+    }
     return candidate.qualifies();
 }
 #endif
 }
 
 bool ShellController::eventFilter(QObject *watched, QEvent *event) {
+#ifdef Q_OS_WIN
+    if (watched == window_ && inputTrace().enabled
+        && (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonRelease
+            || event->type() == QEvent::MouseButtonDblClick))
+        std::fprintf(stderr, "input-trace mouse at=%lldms type=%d expanded=%d\n",
+            (long long)InputTrace::now(), int(event->type()), state_->expanded());
+#endif
     return watched == window_ && handleDoubleClick(event);
 }
 
@@ -77,6 +138,11 @@ ShellController::ShellController(AppState *state, QObject *parent) : QObject(par
     connect(state_, &AppState::reducedMotionChanged, this, resetInactiveGaze);
     connect(state_, &AppState::eventChanged, this, resetInactiveGaze);
     connect(state_, &AppState::expandedChanged, this, [this] {
+#ifdef Q_OS_WIN
+        if (inputTrace().enabled)
+            std::fprintf(stderr, "input-trace expanded at=%lldms value=%d source=%s\n",
+                (long long)InputTrace::now(), state_->expanded(), hoverOpening_ ? "hover" : "explicit");
+#endif
         if (!state_->expanded()) {
             interaction_.suppressUntilLeave();
             setPinned(false);
@@ -136,6 +202,9 @@ void ShellController::setSuppressed(bool suppressed) {
         return;
     }
     suppressed_ = suppressed;
+    if (inputTrace().enabled)
+        std::fprintf(stderr, "input-trace suppression at=%lldms value=%d visible=%d expanded=%d pass-through=%d\n",
+            (long long)InputTrace::now(), suppressed_, window_ && window_->isVisible(), state_->expanded(), state_->passThroughActive());
     if (suppressed) resetGaze();
     interaction_.suspend();
     wasPressed_ = false;
@@ -164,43 +233,59 @@ void ShellController::setNativeInputSuppressed(bool suppressed) {
             const LONG_PTR style = GetWindowLongPtrW(previous, GWL_EXSTYLE);
             const LONG_PTR restored = wasNativeInputTransparent_ ? style | WS_EX_TRANSPARENT : style & ~static_cast<LONG_PTR>(WS_EX_TRANSPARENT);
             if (restored != style) SetWindowLongPtrW(previous, GWL_EXSTYLE, restored);
-            if (SetWindowRgn(previous, region, TRUE)) region = nullptr; // Windows owns it after success.
-            else if (!SetWindowRgn(previous, nullptr, TRUE)) qWarning("Could not restore the island's native input region.");
+            if (nativeRegionSuppressed_) {
+                if (SetWindowRgn(previous, region, TRUE)) region = nullptr; // Windows owns it after success.
+                else if (!SetWindowRgn(previous, nullptr, TRUE)) qWarning("Could not restore the island's native input region.");
+            }
             RemovePropW(previous, suppressionOwnerProperty);
             SetWindowPos(previous, nullptr, 0, 0, 0, 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
         }
         if (region) DeleteObject(region);
         savedWindowRegion_ = suppressedWindowId_ = 0;
+        nativeRegionSuppressed_ = false;
     }
-    if (!suppressed || !currentId || suppressedWindowId_ == currentId) return;
+    if (!suppressed || !currentId) return;
     const auto target = reinterpret_cast<HWND>(currentId);
     const LONG_PTR style = GetWindowLongPtrW(target, GWL_EXSTYLE);
-    auto savedRegion = CreateRectRgn(0, 0, 0, 0);
-    if (!savedRegion) return;
-    if (GetWindowRgn(target, savedRegion) == ERROR) { DeleteObject(savedRegion); savedRegion = nullptr; }
-    if (!SetPropW(target, suppressionOwnerProperty, owner)) {
-        if (savedRegion) DeleteObject(savedRegion);
-        qWarning("Could not mark the island's native input region for restoration.");
-        return;
+    if (!suppressedWindowId_) {
+        if (!SetPropW(target, suppressionOwnerProperty, owner)) {
+            qWarning("Could not mark the island's native input region for restoration.");
+            return;
+        }
+        suppressedWindowId_ = currentId;
+        wasNativeInputTransparent_ = (style & WS_EX_TRANSPARENT) != 0;
     }
-    auto empty = CreateRectRgn(0, 0, 0, 0);
-    if (!empty || !SetWindowRgn(target, empty, TRUE)) {
-        if (empty) DeleteObject(empty);
-        if (savedRegion) DeleteObject(savedRegion);
-        RemovePropW(target, suppressionOwnerProperty);
-        qWarning("Could not suppress the island's native input region.");
-        return;
+    // A window region clips drawing as well as input on Windows. Only fullscreen
+    // suppression may empty it; double-click pass-through must keep the surface
+    // drawable for the collapse and opacity animations, using transparency alone.
+    const bool hideSurface = suppressed_;
+    if (hideSurface && !nativeRegionSuppressed_) {
+        auto savedRegion = CreateRectRgn(0, 0, 0, 0);
+        if (!savedRegion) return;
+        if (GetWindowRgn(target, savedRegion) == ERROR) { DeleteObject(savedRegion); savedRegion = nullptr; }
+        auto empty = CreateRectRgn(0, 0, 0, 0);
+        if (!empty || !SetWindowRgn(target, empty, TRUE)) {
+            if (empty) DeleteObject(empty);
+            if (savedRegion) DeleteObject(savedRegion);
+            qWarning("Could not suppress the island's native input region.");
+        } else {
+            savedWindowRegion_ = reinterpret_cast<quintptr>(savedRegion);
+            nativeRegionSuppressed_ = true;
+        }
+    } else if (!hideSurface && nativeRegionSuppressed_) {
+        auto region = reinterpret_cast<HRGN>(savedWindowRegion_);
+        if (SetWindowRgn(target, region, TRUE)) region = nullptr;
+        else if (!SetWindowRgn(target, nullptr, TRUE)) qWarning("Could not restore the island's native input region.");
+        if (region) DeleteObject(region);
+        savedWindowRegion_ = 0;
+        nativeRegionSuppressed_ = false;
     }
-    // An empty native region removes drawing and hit testing independently of
-    // alpha/Qt rendering, and leaves QWindow visibility/manual hide untouched.
-    // WS_EX_TRANSPARENT is a second safeguard for the layered overlay window.
-    SetWindowLongPtrW(target, GWL_EXSTYLE, style | WS_EX_TRANSPARENT);
-    SetWindowPos(target, nullptr, 0, 0, 0, 0,
-        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-    suppressedWindowId_ = currentId;
-    savedWindowRegion_ = reinterpret_cast<quintptr>(savedRegion);
-    wasNativeInputTransparent_ = (style & WS_EX_TRANSPARENT) != 0;
+    if (!(style & WS_EX_TRANSPARENT)) {
+        SetWindowLongPtrW(target, GWL_EXSTYLE, style | WS_EX_TRANSPARENT);
+        SetWindowPos(target, nullptr, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    }
 #else
     Q_UNUSED(suppressed)
 #endif
@@ -252,6 +337,7 @@ void ShellController::resetGaze() {
 
 void ShellController::poll() {
     if (!window_) return;
+    PollTrace trace;
     const auto now = clock_.elapsed();
     const float dt = static_cast<float>(now - lastTick_) / 1000;
     lastTick_ = now;
@@ -261,6 +347,7 @@ void ShellController::poll() {
         setSuppressed(foregroundFillsIslandMonitor(window_));
 #endif
     }
+    if (trace.clock.isValid()) trace.fullscreen = trace.clock.elapsed();
     if (!window_->isVisible() || suppressed_ || state_->passThroughActive()) {
         resetGaze();
         interaction_.suspend();
@@ -288,17 +375,28 @@ void ShellController::poll() {
         QString{}, false, window_->property("crownHeight").toReal());
     const bool inside = target.contains(cursor);
     const bool nearby = body.adjusted(-24, -24, 24, 24).contains(cursor);
+    trace.nearby = nearby;
+    if (inputTrace().enabled && inside != inputTrace().inside) {
+        inputTrace().inside = inside;
+        std::fprintf(stderr, "input-trace boundary at=%lldms inside=%d expanded=%d poll-gap=%lldms\n",
+            (long long)InputTrace::now(), inside, state_->expanded(), (long long)trace.gap);
+    }
     bool pressed = QGuiApplication::mouseButtons() != Qt::NoButton;
 #ifdef Q_OS_WIN
     pressed = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) || (GetAsyncKeyState(VK_RBUTTON) & 0x8000);
 #endif
     // The frame is fixed at the expanded size; only the visible shell takes input.
+    const auto beforeClickThrough = trace.clock.isValid() ? trace.clock.elapsed() : 0;
     setClickThrough(!islandBodyPath(body.adjusted(-2, -2, 2, 2), 24,
         QString{}, false, window_->property("crownHeight").toReal()).contains(cursor));
+    if (trace.clock.isValid()) trace.clickThrough = trace.clock.elapsed() - beforeClickThrough;
     if (!pressed) ignorePressUntilRelease_ = false;
     if (pressed && !wasPressed_ && !ignorePressUntilRelease_ && !inside && state_->expanded() && !pinned_ && !window_->property("interactionHold").toBool()) close();
     wasPressed_ = pressed;
+    const auto beforeHover = trace.clock.isValid() ? trace.clock.elapsed() : 0;
     refreshHoverAfterGeometryChange(pressed);
+    if (trace.clock.isValid()) trace.hover = trace.clock.elapsed() - beforeHover;
+    const auto beforeInteraction = trace.clock.isValid() ? trace.clock.elapsed() : 0;
     const auto action = interaction_.update({inside, state_->expanded(), pinned_ || window_->property("interactionHold").toBool() || now < holdUntil_, pressed}, now);
     if (action == ShellInteraction::Action::Open) {
         hoverOpening_ = true;
@@ -306,6 +404,7 @@ void ShellController::poll() {
         hoverOpening_ = false;
     }
     else if (action == ShellInteraction::Action::Close) state_->setExpanded(false);
+    if (trace.clock.isValid()) trace.interaction = trace.clock.elapsed() - beforeInteraction;
 
     x_.target = static_cast<float>(std::clamp(cursor.x(), -24.0, width + 24));
     y_.target = static_cast<float>(std::clamp(cursor.y(), -24.0, height + 24));

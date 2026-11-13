@@ -46,6 +46,22 @@ int main() {
             ++scenarios;
         }
         {
+            ShellFullscreenCandidate candidate;
+            candidate.client = candidate.monitor = {1920, 0, 3840, 1080};
+            candidate.outer = {1912, -8, 3848, 1088};
+            candidate.visible = candidate.sameMonitor = true;
+            candidate.maximized = candidate.decoratedResizable = true;
+            expect(candidate.normalMaximized() && !candidate.qualifies(),
+                "A decorated maximized client filling a monitor without a reserved taskbar is not fullscreen.");
+            candidate.decoratedResizable = false;
+            expect(candidate.qualifies(), "Borderless fullscreen remains fullscreen even if Windows reports it maximized.");
+            candidate.decoratedResizable = true; candidate.maximized = false;
+            expect(candidate.qualifies(), "A fullscreen presentation retaining decoration styles is not a normal maximized window.");
+            candidate.maximized = true; candidate.outer = candidate.monitor;
+            expect(candidate.qualifies(), "Fullscreen with exact monitor outer bounds remains fullscreen even when maximized and decorated.");
+            ++scenarios;
+        }
+        {
             ShellInteraction shell;
             shell.update({true, false, false, false}, 0);
             shell.update({true, false, false, false, false}, 200);

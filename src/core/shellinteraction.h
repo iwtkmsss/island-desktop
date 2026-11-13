@@ -1,19 +1,27 @@
 #pragma once
 #include <cstdint>
 
-// Physical screen coordinates. Client bounds (rather than the decorated window
-// bounds) distinguish a normal maximized app from a fullscreen presentation.
+// Physical screen coordinates. With no reserved taskbar area, a normal maximized
+// app's client can fill the monitor too; its decorated resize frame extends out.
 struct ShellFullscreenCandidate {
     struct Rect { long left = 0, top = 0, right = 0, bottom = 0; };
-    Rect client, monitor;
+    Rect client, monitor, outer;
     bool visible = false;
     bool minimized = false;
     bool belongsToUs = false;
     bool desktopSurface = false;
     bool sameMonitor = false;
+    bool maximized = false;
+    bool decoratedResizable = false;
+    bool normalMaximized() const {
+        return maximized && decoratedResizable
+            && outer.right > outer.left && outer.bottom > outer.top
+            && (outer.left < monitor.left || outer.top < monitor.top
+                || outer.right > monitor.right || outer.bottom > monitor.bottom);
+    }
     bool qualifies() const {
         constexpr long tolerance = 1;
-        return visible && !minimized && !belongsToUs && !desktopSurface && sameMonitor
+        return visible && !minimized && !belongsToUs && !desktopSurface && sameMonitor && !normalMaximized()
             && client.right > client.left && client.bottom > client.top
             && monitor.right > monitor.left && monitor.bottom > monitor.top
             && client.left <= monitor.left + tolerance && client.top <= monitor.top + tolerance

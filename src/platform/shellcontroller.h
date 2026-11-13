@@ -47,6 +47,9 @@ signals:
     void pinnedChanged();
     void suppressionChanged();
 private:
+#ifdef Q_OS_WIN
+    friend class WindowsShellTest;
+#endif
     void poll();
     bool eventFilter(QObject *watched, QEvent *event) override;
     bool handleDoubleClick(QEvent *event);
@@ -80,4 +83,5 @@ private:
     quintptr suppressedWindowId_ = 0;
     quintptr savedWindowRegion_ = 0;
     bool wasNativeInputTransparent_ = false;
+    bool nativeRegionSuppressed_ = false;
 };

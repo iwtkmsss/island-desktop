@@ -8,6 +8,22 @@
 #include "linux/kwinpointer.h"
 #endif
 
+namespace {
+bool interactiveAt(QQuickItem *item, const QPointF &scenePosition) {
+    if (!item || !item->isVisible() || !item->isEnabled() || item->opacity() <= 0 || item->scale() == 0) return false;
+    const auto local = item->mapFromScene(scenePosition);
+    if (item->clip() && !item->boundingRect().contains(local)) return false;
+    if (item->property("islandInteractive").toBool() && item->contains(local)) return true;
+    // Decorations can sit above controls, and non-clipping layout containers can
+    // have zero size while their children overflow. Search every visual branch;
+    // only an actual clip (or a hidden/disabled ancestor) may prune descendants.
+    for (auto *child : item->childItems()) {
+        if (interactiveAt(child, scenePosition)) return true;
+    }
+    return false;
+}
+}
+
 bool ShellController::handleDoubleClick(QEvent *event) {
     if (!window_ || event->type() != QEvent::MouseButtonDblClick || suppressed_) return false;
     const auto *mouse = static_cast<QMouseEvent *>(event);
@@ -17,11 +33,7 @@ bool ShellController::handleDoubleClick(QEvent *event) {
         window_->property("shellWidth").toReal(), window_->property("shellHeight").toReal());
     if (!islandBodyPath(body, 25, {}, false, window_->property("crownHeight").toReal()).contains(mouse->position())) return false;
     // Interactive controls opt out; background/eyes keep the established gesture.
-    QQuickItem *item=window_->contentItem();
-    while (auto *child=item->childAt(item->mapFromScene(mouse->position()).x(),item->mapFromScene(mouse->position()).y())) {
-        item=child;
-        if(item->property("islandInteractive").toBool()) return false;
-    }
+    if (interactiveAt(window_->contentItem(), mouse->position())) return false;
     state_->startPassThrough();
     event->accept(); return true;
 }
