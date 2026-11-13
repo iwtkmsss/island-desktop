@@ -1,5 +1,7 @@
 # Island Desktop
 
+Для продовження на Linux після синхронізації 13.11.2026 спочатку прочитати `LINUX_HANDOFF.md` (цей файл передається через git).
+
 Перед роботою прочитати `PROJECT_CONTEXT.md`. Вимоги та матеріали: `docs/`, `references/`.
 Журнали сесій: `docs/session-log-*.md`; найсвіжіші — `docs/session-log-2026-11-13-windows-panel.md` (Windows: Головна як панель) і `docs/session-log-2026-11-13-claude-panel-sync.md` (Linux); Windows перед переносом — `docs/session-log-2026-11-12-part4.md`.
 `PROJECT_CONTEXT.md` і `docs/` — локальні файли поза git; якщо їх немає після клонування, працювати за цим файлом і README.
