@@ -8,6 +8,10 @@
 #include <taskmanager/tasksmodel.h>
 #include <QDBusServiceWatcher>
 #endif
+#ifdef Q_OS_WIN
+#include <memory>
+class WindowsDesktop;
+#endif
 class DesktopController final : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool available READ available CONSTANT)
@@ -21,6 +25,16 @@ class DesktopController final : public QObject {
     Q_PROPERTY(int taskRevision READ taskRevision NOTIFY taskRevisionChanged)
 public:
     explicit DesktopController(const QString &settingsFile, QObject *parent=nullptr);
+#ifdef Q_OS_WIN
+    ~DesktopController() override;
+#endif
+    // Windows: taking over the notification area is skipped in development runs
+    // (smoke test, screenshot, diagnostics, unit tests). No-op elsewhere.
+#ifdef Q_OS_WIN
+    static void setTrayCaptureAllowed(bool allowed);
+#else
+    static void setTrayCaptureAllowed(bool) {}
+#endif
     bool available() const;
     QString metrics() const { return metrics_; }
     bool metricsActive() const { return metricsActive_; }
@@ -69,5 +83,9 @@ private:
     qint64 activeLostAt_=0,focusGainedAt_=0;
     QDBusServiceWatcher watcher_;
     quint64 generation_=0;
+#endif
+#ifdef Q_OS_WIN
+    friend class WindowsDesktop;
+    std::unique_ptr<WindowsDesktop> win_;
 #endif
 };

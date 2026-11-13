@@ -55,18 +55,35 @@ if ($Package) {
     $destination = Join-Path $projectRoot 'dist\IslandDesktop'
     # A running portable copy locks its exe and DLLs; close it for the copy and reopen it afterwards.
     $portableExe = Join-Path $destination 'IslandDesktop.exe'
-    $running = @(Get-Process -Name IslandDesktop -ErrorAction SilentlyContinue | Where-Object { -not $_.Path -or $_.Path -eq $portableExe })
+    # A guardian uses the same exe. Killing it together with the UI would skip
+    # taskbar restoration, so identify command lines before stopping anything.
+    $portableProcesses = @(Get-CimInstance Win32_Process -Filter "Name='IslandDesktop.exe'" | Where-Object { $_.ExecutablePath -eq $portableExe })
+    if (@($portableProcesses | Where-Object { -not $_.CommandLine }).Count -gt 0) {
+        throw 'Не вдалося розрізнити portable-застосунок і захист панелі задач. Закрийте Island Desktop через трей і повторіть.'
+    }
+    $running = @($portableProcesses | Where-Object { $_.CommandLine -notmatch '(?:^|\s)--taskbar-guardian(?:\s|$)' })
     if ($running.Count -gt 0) {
         Write-Host 'Закриваю запущену portable-копію на час оновлення…'
-        try { $running | Stop-Process -Force -ErrorAction Stop }
+        try { $running | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop } }
         catch { throw 'Не вдалося закрити запущений Island Desktop (можливо, він запущений від адміністратора). Закрийте його через трей і повторіть.' }
-        $running | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue
+        $running | ForEach-Object { Wait-Process -Id $_.ProcessId -Timeout 10 -ErrorAction SilentlyContinue }
+    }
+    # Parent death signals the inherited process handle. Let each guardian
+    # restore its windows and release the executable before deploying files.
+    $guardians = @(Get-CimInstance Win32_Process -Filter "Name='IslandDesktop.exe'" | Where-Object {
+        $_.ExecutablePath -eq $portableExe -and $_.CommandLine -match '(?:^|\s)--taskbar-guardian(?:\s|$)'
+    })
+    foreach ($guardian in $guardians) {
+        Wait-Process -Id $guardian.ProcessId -Timeout 10 -ErrorAction SilentlyContinue
+        if (Get-Process -Id $guardian.ProcessId -ErrorAction SilentlyContinue) {
+            throw 'Захист панелі задач ще не відновив Windows. Оновлення зупинено; guardian примусово не завершувався.'
+        }
     }
     & $cmake --install $buildDir --prefix $destination
     if ($LASTEXITCODE -ne 0) { throw 'Помилка підготовки portable-збірки.' }
     Write-Host "Portable: $portableExe"
     if ($running.Count -gt 0) {
-        Start-Process -FilePath $portableExe -WorkingDirectory $destination -WindowStyle Hidden
+        Start-Process -FilePath $portableExe -WorkingDirectory $destination -WindowStyle Normal
         Write-Host 'Оновлену копію запущено знову.'
     }
 } else {

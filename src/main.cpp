@@ -1,5 +1,9 @@
 #include "appstate.h"
 #include "desktopcontroller.h"
+#include "taskbarcontroller.h"
+#ifdef Q_OS_WIN
+#include "taskbarguardian.h"
+#endif
 #include "mediacontroller.h"
 #include "shellcontroller.h"
 #include "volumecontroller.h"
@@ -22,6 +26,8 @@
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QLockFile>
+#include <QMutex>
+#include <QTimer>
 #include <QMenu>
 #include <QPainter>
 #include <QQmlApplicationEngine>
@@ -77,6 +83,7 @@ public:
         auto image=icon.pixmap(dimensions).toImage();
         if(image.isNull()){image=QImage(dimensions,QImage::Format_ARGB32_Premultiplied);image.fill(Qt::transparent);QPainter p(&image);p.setPen(QPen(Qt::gray,2));p.drawRoundedRect(image.rect().adjusted(3,3,-3,-3),4,4);}
         // Uniform monochrome tray glyphs must contrast with the island's theme.
+        if(!id.contains("&raw")){
         int monochrome=0,colored=0,lowest=255,highest=0;
         for(int y=0;y<image.height();++y)for(int x=0;x<image.width();++x){const auto c=image.pixelColor(x,y);if(c.alpha()<20)continue;
             if(qMax(c.red(),qMax(c.green(),c.blue()))-qMin(c.red(),qMin(c.green(),c.blue()))>12){++colored;continue;}
@@ -86,6 +93,7 @@ public:
             image=image.convertToFormat(QImage::Format_ARGB32);
             for(int y=0;y<image.height();++y)for(int x=0;x<image.width();++x){const auto c=image.pixelColor(x,y);if(qMax(c.red(),qMax(c.green(),c.blue()))-qMin(c.red(),qMin(c.green(),c.blue()))<=12)image.setPixelColor(x,y,QColor(tone,tone,tone,c.alpha()));}
         }
+        }
         if(size) *size=image.size();
         return image;
     }
@@ -93,6 +101,10 @@ private: DesktopController *desktop_;
 };
 
 int main(int argc, char *argv[]) {
+#ifdef Q_OS_WIN
+    const int guardian = TaskbarNative::guardianEntry(argc, argv);
+    if (guardian >= 0) return guardian;
+#endif
     qputenv("QT_FORCE_STDERR_LOGGING", "1");
 #ifdef Q_OS_LINUX
     // Keep launchers and autostart consistent with run.sh. Native Wayland can
@@ -124,6 +136,7 @@ int main(int argc, char *argv[]) {
     parser.addVersionOption();
     parser.addOption({"settings", "Use a separate settings file (development).", "file"});
     parser.addOption({"expanded", "Open the expanded panel."});
+    parser.addOption({"show-settings", "Open the separate settings window."});
     parser.addOption({"pin", "Keep the expanded panel open."});
     parser.addOption({"section", "Open home, time, media or devices (legacy: clock, timer, music, volume).", "id"});
     parser.addOption({"theme", "Use dark or light theme.", "theme"});
@@ -131,6 +144,7 @@ int main(int argc, char *argv[]) {
     parser.addOption({"inspect-ui", "Expose a normal taskbar window for UI inspection (development)."});
     parser.addOption({"screenshot", "Save a rendered PNG and exit (development).", "file"});
     parser.addOption({"diagnostics", "Save local audio/volume/shell status JSON and exit (development).", "file"});
+    parser.addOption({"tray-capture", "Host the notification area during a screenshot/diagnostics run (development, Windows)."});
     parser.addOption({"capture-delay", "Delay diagnostic capture in milliseconds (development).", "milliseconds", "1800"});
     parser.process(app);
 
@@ -147,7 +161,7 @@ int main(int argc, char *argv[]) {
         QLocalSocket socket;
         socket.connectToServer(serverName);
         if (socket.waitForConnected(1000)) {
-            socket.write("show");
+            socket.write(parser.isSet("show-settings") ? "show-settings\n" : "show\n");
             socket.waitForBytesWritten(1000);
             return 0;
         }
@@ -165,7 +179,15 @@ int main(int argc, char *argv[]) {
     if (parser.isSet("section")) state.setSection(parser.value("section"));
     if (parser.isSet("theme")) state.setTheme(parser.value("theme"));
     state.setExpanded(parser.isSet("expanded"));
+    // Development runs must not take over the real notification area.
+    if (parser.isSet("smoke-test") || ((parser.isSet("screenshot") || parser.isSet("diagnostics")) && !parser.isSet("tray-capture")))
+        DesktopController::setTrayCaptureAllowed(false);
     DesktopController desktop(settingsFile);
+    // Development captures must never hide Explorer's taskbar, even when the
+    // user's persisted preference is enabled in the selected settings file.
+    if (parser.isSet("smoke-test") || parser.isSet("screenshot") || parser.isSet("diagnostics"))
+        TaskbarController::setControlAllowed(false);
+    TaskbarController taskbar(settingsFile);
     MediaController media(settingsFile);
     QObject::connect(&desktop, &DesktopController::errorChanged, &state, [&] {
         if (!desktop.error().isEmpty()) state.postEvent({"desktop", desktop.error(), "notice", 40, 5000, "desktop-error"});
@@ -218,12 +240,13 @@ int main(int argc, char *argv[]) {
     engine.loadFromModule("Island", "Main");
     if (engine.rootObjects().isEmpty()) return 1;
     auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
-    if (qEnvironmentVariableIsSet("ISLAND_AUDIO_TRACE") && window) {
+    if ((qEnvironmentVariableIsSet("ISLAND_AUDIO_TRACE") || qEnvironmentVariableIsSet("ISLAND_MOTION_TRACE")
+        || qEnvironmentVariableIsSet("ISLAND_DESKTOP_TRACE")) && window) {
         // Development trace: worst interval between presented frames per second.
-        auto *clock = new QElapsedTimer; clock->start();
+        auto clock = std::make_shared<QElapsedTimer>(); clock->start();
         auto last = std::make_shared<qint64>(0), worst = std::make_shared<qint64>(0), reported = std::make_shared<qint64>(0);
         auto frames = std::make_shared<int>(0);
-        QObject::connect(window, &QQuickWindow::frameSwapped, window, [=] {
+        if (qEnvironmentVariableIsSet("ISLAND_AUDIO_TRACE")) QObject::connect(window, &QQuickWindow::frameSwapped, window, [=] {
             const auto now = clock->elapsed();
             if (*last) *worst = std::max(*worst, now - *last);
             *last = now; ++*frames;
@@ -232,6 +255,30 @@ int main(int argc, char *argv[]) {
                 *worst = 0; *reported = now; *frames = 0;
             }
         }, Qt::DirectConnection);
+        // Frames presented within each open/close animation (380 ms + margin).
+        struct Motion { QMutex mutex; QList<qint64> frames; };
+        auto motion = std::make_shared<Motion>();
+        QObject::connect(window, &QQuickWindow::frameSwapped, window, [=] {
+            QMutexLocker lock(&motion->mutex);
+            motion->frames.append(clock->elapsed());
+            if (motion->frames.size() > 600) motion->frames.remove(0, 300);
+        }, Qt::DirectConnection);
+        QObject::connect(&state, &AppState::expandedChanged, window, [=, &state] {
+            const auto begin = clock->elapsed();
+            const auto monotonicBegin = clock->msecsSinceReference() + begin;
+            const bool expanded = state.expanded();
+            QTimer::singleShot(700, window, [=] {
+                QMutexLocker lock(&motion->mutex);
+                int frames = 0; qint64 worstGap = 0, previous = begin, firstFrame = -1;
+                for (const auto at : std::as_const(motion->frames)) {
+                    if (at < begin || at > begin + 420) continue;
+                    if (firstFrame < 0) firstFrame = at - begin;
+                    ++frames; worstGap = std::max(worstGap, at - previous); previous = at;
+                }
+                std::fprintf(stderr, "motion-trace %s at=%lldms frames=%d first-frame=%lldms worst-gap=%lldms\n",
+                    expanded ? "open" : "close", (long long)monotonicBegin, frames, (long long)firstFrame, (long long)worstGap);
+            });
+        });
     }
     if (!window) return 1;
 #ifdef Q_OS_LINUX
@@ -268,12 +315,28 @@ int main(int argc, char *argv[]) {
 #endif
 
     engine.setInitialProperties({{"model", QVariant::fromValue(&state)}, {"media", QVariant::fromValue(&media)},
-        {"monitors", QVariant::fromValue(&monitors)}, {"startup", QVariant::fromValue(&startup)}, {"hotkeys", QVariant::fromValue(&hotkeys)}});
+        {"monitors", QVariant::fromValue(&monitors)}, {"startup", QVariant::fromValue(&startup)}, {"hotkeys", QVariant::fromValue(&hotkeys)},
+        {"taskbar", QVariant::fromValue(&taskbar)}});
     engine.loadFromModule("Island", "SettingsWindow");
     if (engine.rootObjects().size() != 2) return 1;
     auto *settingsWindow = qobject_cast<QQuickWindow *>(engine.rootObjects().last());
     if (!settingsWindow) return 1;
     settingsWindow->setTransientParent(nullptr);
+    const auto settingsTrace = [settingsWindow, &state](const char *phase) {
+        if (qEnvironmentVariableIsSet("ISLAND_DESKTOP_TRACE"))
+            std::fprintf(stderr, "desktop-trace settings %s model=%d visible=%d\n",
+                phase, state.settingsOpen(), settingsWindow->isVisible());
+    };
+    QObject::connect(settingsWindow, &QWindow::visibleChanged, &app, [settingsTrace] { settingsTrace("visibility"); });
+    const auto showSettings = [settingsWindow, &state, settingsTrace] {
+        settingsTrace("requested");
+        // Let the native tray menu finish before creating a foreground window.
+        QTimer::singleShot(0, settingsWindow, [settingsWindow, &state, settingsTrace] {
+            state.setSettingsOpen(true);
+            settingsWindow->showNormal(); settingsWindow->raise(); settingsWindow->requestActivate();
+            settingsTrace("shown");
+        });
+    };
 
     const auto showIsland = [&] {
         if (state.passThroughActive()) return;
@@ -281,14 +344,34 @@ int main(int argc, char *argv[]) {
         window->raise();
         window->requestActivate();
     };
-    QObject::connect(&instanceServer, &QLocalServer::newConnection, &app, [&] {
+    const auto dispatchInstanceMessage = [&, showSettings](const QByteArray &message) {
+        if (message == "show-settings") showSettings();
+        else if (message == "show") { interaction.open(); showIsland(); }
+    };
+    const auto acceptConnections = [&, dispatchInstanceMessage] {
         while (auto *socket = instanceServer.nextPendingConnection()) {
+            auto buffer = std::make_shared<QByteArray>();
+            auto handled = std::make_shared<bool>(false);
+            const auto receive = [socket, buffer, handled, dispatchInstanceMessage](bool final) {
+                if (*handled) return;
+                buffer->append(socket->readAll());
+                if (buffer->size() > 64) { *handled = true; socket->abort(); return; }
+                const auto newline = buffer->indexOf('\n');
+                if (newline < 0 && !final) return;
+                *handled = true;
+                dispatchInstanceMessage((newline < 0 ? *buffer : buffer->left(newline)).trimmed());
+                socket->disconnectFromServer();
+            };
             QObject::connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
-            QObject::connect(socket, &QLocalSocket::readyRead, socket, [socket] { socket->readAll(); socket->disconnectFromServer(); });
-            interaction.open();
-            showIsland();
+            QObject::connect(socket, &QLocalSocket::readyRead, socket, [receive] { receive(false); });
+            QObject::connect(socket, &QLocalSocket::disconnected, socket, [receive] { receive(true); });
+            QTimer::singleShot(1500, socket, [receive] { receive(true); });
+            receive(socket->state() == QLocalSocket::UnconnectedState);
         }
-    });
+    };
+    QObject::connect(&instanceServer, &QLocalServer::newConnection, &app, acceptConnections);
+    acceptConnections();
+    if (parser.isSet("show-settings")) showSettings();
 
     QSystemTrayIcon tray(islandIcon());
     tray.setToolTip("Island Desktop");
@@ -302,10 +385,7 @@ int main(int argc, char *argv[]) {
         window->hide();
     });
     menu.addSeparator();
-    menu.addAction(QStringLiteral("Налаштування"), &app, [&] {
-        state.setSettingsOpen(true);
-        settingsWindow->show(); settingsWindow->raise(); settingsWindow->requestActivate();
-    });
+    menu.addAction(QStringLiteral("Налаштування"), &app, showSettings);
     menu.addSeparator();
     menu.addAction(QStringLiteral("Вийти"), &app, &QCoreApplication::quit);
     tray.setContextMenu(&menu);
@@ -351,10 +431,13 @@ int main(int argc, char *argv[]) {
             if (parser.isSet("diagnostics")) {
                 const auto path = QFileInfo(parser.value("diagnostics")).absoluteFilePath();
                 QDir().mkpath(QFileInfo(path).absolutePath());
+                int trayImages = 0;
+                for (const auto &item : desktop.trayItems())
+                    if (!desktop.trayIcon(item.toMap().value("id").toString()).isNull()) ++trayImages;
                 const QJsonObject report{{"version", app.applicationVersion()}, {"section", state.section()},
                     {"platform", QGuiApplication::platformName()},
                     {"desktop", QJsonObject{{"available", desktop.available()}, {"tasks", desktop.tasks() ? desktop.tasks()->rowCount() : 0},
-                        {"trayItems", int(desktop.trayItems().size())}, {"menuOpen", desktop.menuOpen()}, {"metrics", desktop.metrics()}, {"error", desktop.error()}}},
+                        {"trayItems", int(desktop.trayItems().size())}, {"trayImages", trayImages},{"menuOpen", desktop.menuOpen()}, {"metrics", desktop.metrics()}, {"error", desktop.error()}}},
                     {"media", QJsonObject{{"available", media.available()}, {"playing", media.playing()},
                         {"canToggle", media.canToggle()}, {"canSeek", media.canSeek()},
                         {"sourcesCount", int(media.sources().size())}, {"error", media.error()}}},

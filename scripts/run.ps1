@@ -9,6 +9,7 @@ elseif (Test-Path -LiteralPath $development) {
     $env:PATH = (Join-Path $qtRoot 'bin') + ';' + $env:PATH
     $executable = $development
 } else { throw 'Спочатку запустіть .\scripts\build.ps1 -Package' }
-$launchOptions = @{ FilePath = $executable; WindowStyle = 'Hidden'; WorkingDirectory = (Split-Path $executable) }
+# SW_HIDE can suppress Qt's separate settings HWND while QML reports visible.
+$launchOptions = @{ FilePath = $executable; WindowStyle = 'Normal'; WorkingDirectory = (Split-Path $executable) }
 if ($Expanded) { $launchOptions.ArgumentList = '--expanded' }
 Start-Process @launchOptions

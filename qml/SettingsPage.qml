@@ -9,6 +9,7 @@ Item {
     required property QtObject media
     required property QtObject monitors
     required property QtObject startup
+    required property QtObject taskbar
     required property QtObject hotkeys
     // Fixed viewport: new options extend scroll content, never the native frame.
     implicitHeight: 266
@@ -340,6 +341,48 @@ Item {
                 Text {
                     visible: page.startup.error.length > 0
                     width: parent.width; text: page.startup.error; textFormat: Text.PlainText
+                    color: page.colors.secondary; font.pixelSize: 11; wrapMode: Text.WordWrap
+                }
+            }
+            Column {
+                width: parent.width; spacing: 5
+                visible: page.taskbar.available
+                RowLayout {
+                    id: taskbarRow
+                    width: parent.width
+                    Text {
+                        text: "Повністю сховати панель задач Windows"
+                        color: page.colors.text; font.pixelSize: 13
+                        Layout.fillWidth: true; wrapMode: Text.WordWrap
+                    }
+                    Switch {
+                        id: taskbarSwitch
+                        checked: page.taskbar.hidden
+                        Accessible.name: "Повністю сховати панель задач Windows"
+                        onToggled: page.taskbar.hidden = checked
+                        onActiveFocusChanged: if (activeFocus) page.reveal(taskbarRow)
+                        indicator: Rectangle {
+                            x: taskbarSwitch.leftPadding; y: (taskbarSwitch.height - height) / 2
+                            width: 38; height: 22; radius: 11
+                            color: taskbarSwitch.checked ? page.colors.text : page.colors.raised
+                            border.color: taskbarSwitch.visualFocus ? page.colors.text : page.colors.line
+                            border.width: taskbarSwitch.visualFocus ? 2 : 1
+                            Rectangle {
+                                x: taskbarSwitch.checked ? 19 : 3; y: 3
+                                width: 16; height: 16; radius: 8
+                                color: taskbarSwitch.checked ? page.colors.inverse : page.colors.secondary
+                            }
+                        }
+                    }
+                }
+                Text {
+                    width: parent.width
+                    text: "Панель не з’являється при наведенні. Відновлюється після вимкнення цього параметра або виходу з Island Desktop."
+                    color: page.colors.muted; font.pixelSize: 11; wrapMode: Text.WordWrap
+                }
+                Text {
+                    visible: page.taskbar.error.length > 0
+                    width: parent.width; text: page.taskbar.error; textFormat: Text.PlainText
                     color: page.colors.secondary; font.pixelSize: 11; wrapMode: Text.WordWrap
                 }
             }

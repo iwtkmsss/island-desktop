@@ -130,6 +130,16 @@ Canvas {
             c.beginPath(); c.roundedRect(2.5, 7, 19, 11, 5, 5); c.stroke()
             line(7.5, 10.5, 7.5, 14.5); line(5.5, 12.5, 9.5, 12.5)
             line(15.5, 11.5, 15.6, 11.5); line(18, 13.5, 18.1, 13.5)
+        } else if (name === "apps") {
+            const ps = [5.5, 12, 18.5]
+            for (let i = 0; i < 3; ++i) for (let j = 0; j < 3; ++j) {
+                c.beginPath(); c.arc(ps[i], ps[j], 1.5, 0, Math.PI * 2); c.fill()
+            }
+        } else if (name === "wifi") {
+            for (const r of [4.5, 8.5, 12.5]) {
+                c.beginPath(); c.arc(12, 18.5, r, -Math.PI * 0.75, -Math.PI * 0.25); c.stroke()
+            }
+            c.beginPath(); c.arc(12, 18.5, 1.4, 0, Math.PI * 2); c.fill()
         } else if (name === "device") {
             c.beginPath(); c.roundedRect(4, 4, 16, 16, 4, 4); c.stroke()
             c.beginPath(); c.arc(12, 12, 1.6, 0, Math.PI * 2); c.fill()

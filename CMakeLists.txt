@@ -41,7 +41,7 @@ if(BUILD_TESTING)
         target_compile_options(island_tests PRIVATE /utf-8)
     endif()
     add_test(NAME island_state COMMAND island_tests -o test-results.txt,txt)
-    foreach(suite volume_event audioanalysis eventqueue system power devicetracker accent cursorgaze)
+    foreach(suite volume_event audioanalysis eventqueue system power devicetracker accent cursorgaze tasklist)
         qt_add_executable(${suite}_tests tests/${suite}_test.cpp)
         set_target_properties(${suite}_tests PROPERTIES WIN32_EXECUTABLE FALSE)
         target_include_directories(${suite}_tests PRIVATE src/core)
@@ -70,6 +70,50 @@ if(BUILD_TESTING)
         target_compile_options(monitor_tests PRIVATE -Wall -Wextra -Wpedantic)
     endif()
     add_test(NAME island_monitor COMMAND monitor_tests -o monitor-results.txt,txt)
+endif()
+
+if(BUILD_TESTING AND WIN32)
+    qt_add_executable(windows_taskbar_tests tests/windows_taskbar_test.cpp
+        src/platform/taskbarcontroller.h src/platform/windows/taskbarcontroller.cpp
+        src/platform/windows/taskbarguardian.cpp src/platform/windows/taskbarguardian.h)
+    set_target_properties(windows_taskbar_tests PROPERTIES WIN32_EXECUTABLE FALSE)
+    target_include_directories(windows_taskbar_tests PRIVATE src/platform src/platform/windows)
+    target_compile_definitions(windows_taskbar_tests PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(windows_taskbar_tests PRIVATE Qt6::Core Qt6::Test user32)
+    target_compile_options(windows_taskbar_tests PRIVATE /W4 /utf-8)
+    add_test(NAME island_windows_taskbar COMMAND windows_taskbar_tests -o windows_taskbar-results.txt,txt)
+    set_tests_properties(island_windows_taskbar PROPERTIES TIMEOUT 40)
+    qt_add_executable(windows_shell_tests tests/windows_shell_test.cpp
+        src/platform/windows/shellcontroller.cpp src/platform/shellgesture.cpp src/platform/shellcontroller.h)
+    set_target_properties(windows_shell_tests PROPERTIES WIN32_EXECUTABLE FALSE)
+    target_include_directories(windows_shell_tests PRIVATE src/platform src/core)
+    target_compile_definitions(windows_shell_tests PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(windows_shell_tests PRIVATE island_core Qt6::Quick Qt6::Test user32 gdi32)
+    target_compile_options(windows_shell_tests PRIVATE /W4 /utf-8)
+    add_test(NAME island_windows_shell COMMAND windows_shell_tests -o windows_shell-results.txt,txt)
+    # Uses a private window class with forwarding and announcing off: the real
+    # notification area is never touched.
+    qt_add_executable(windows_tray_tests tests/windows_tray_test.cpp
+        src/platform/windows/trayhost.cpp src/platform/windows/trayhost.h)
+    set_target_properties(windows_tray_tests PROPERTIES WIN32_EXECUTABLE FALSE)
+    target_include_directories(windows_tray_tests PRIVATE src/platform/windows)
+    target_compile_definitions(windows_tray_tests PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(windows_tray_tests PRIVATE Qt6::Gui Qt6::Test user32 shell32 gdi32)
+    target_compile_options(windows_tray_tests PRIVATE /W4 /utf-8)
+    add_test(NAME island_windows_tray COMMAND windows_tray_tests -o windows_tray-results.txt,txt)
+    # Tray capture is switched off inside the test; windows are only enumerated.
+    qt_add_executable(windows_desktop_tests tests/windows_desktop_test.cpp
+        src/platform/desktopcontroller.h src/platform/windows/desktopcontroller.cpp
+        src/platform/windows/shellapps.cpp src/platform/windows/shellapps.h
+        src/platform/windows/taskwatcher.cpp src/platform/windows/taskwatcher.h
+        src/platform/windows/tasksmodel.h
+        src/platform/windows/trayhost.cpp src/platform/windows/trayhost.h)
+    set_target_properties(windows_desktop_tests PROPERTIES WIN32_EXECUTABLE FALSE)
+    target_include_directories(windows_desktop_tests PRIVATE src/platform src/platform/windows src/core)
+    target_compile_definitions(windows_desktop_tests PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(windows_desktop_tests PRIVATE Qt6::Widgets Qt6::Test user32 shell32 ole32 dwmapi version uuid gdi32)
+    target_compile_options(windows_desktop_tests PRIVATE /W4 /utf-8)
+    add_test(NAME island_windows_desktop COMMAND windows_desktop_tests -o windows_desktop-results.txt,txt)
 endif()
 
 

@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls
-import org.kde.kirigami as Kirigami
 import QtQuick.Effects
 Item {
     id: panel
@@ -20,7 +19,7 @@ Item {
         DesktopButton {
             x: 4; y: 8; width: 48; height: 48; colors: panel.colors; hint: "Меню застосунків"
             onClicked: panel.desktop.applicationMenu()
-            contentItem: Kirigami.Icon { source: "application-menu"; implicitWidth: 22; implicitHeight: 22; color: panel.colors.text; isMask: true }
+            contentItem: DesktopIcon { source: "application-menu"; implicitWidth: 22; implicitHeight: 22; color: panel.colors.text; isMask: true }
         }
         Rectangle { x: 59; y: 20; width: 1; height: 24; color: panel.colors.line }
         ListView {
@@ -47,7 +46,7 @@ Item {
                 onClicked: panel.desktop.activateTask(index)
                 background: Rectangle { radius: 11; color: task.current ? panel.colors.line : task.hovered || task.visualFocus ? panel.colors.hover : "transparent" }
                 contentItem: Item {
-                    Kirigami.Icon {
+                    DesktopIcon {
                         id: appIcon
                         anchors.centerIn: parent; width: task.width-16; height: width
                         source: task.model.decoration
@@ -83,24 +82,24 @@ Item {
         opacity: panel.trayOpacity; visible: opacity > 0; enabled: panel.trayOpacity === 1
         DesktopButton {
             colors: panel.colors; hint: "Мережа"; onClicked: panel.desktop.openSettings("kcm_networkmanagement")
-            contentItem: Kirigami.Icon { source: "network-wireless"; color: panel.colors.text; isMask: true }
+            contentItem: DesktopIcon { source: "network-wireless"; color: panel.colors.text; isMask: true }
         }
         DesktopButton {
             id: volumeButton
             colors: panel.colors; hint: panel.volume.available ? "Гучність · " + panel.volume.volume + "%" : "Звук недоступний"
             enabled: panel.volume.available
             onClicked: volumePopup.opened ? volumePopup.close() : volumePopup.open()
-            contentItem: Kirigami.Icon { source: panel.volume.muted ? "audio-volume-muted" : "audio-volume-high"; color: panel.colors.text; isMask: true }
+            contentItem: DesktopIcon { source: panel.volume.muted ? "audio-volume-muted" : "audio-volume-high"; color: panel.colors.text; isMask: true }
         }
         DesktopButton {
             colors: panel.colors; hint: "Bluetooth"; visible: panel.bluetooth.available
             onClicked: panel.desktop.openSettings("kcm_bluetooth")
-            contentItem: Kirigami.Icon { source: "preferences-system-bluetooth-symbolic"; color: panel.colors.text; isMask: true }
+            contentItem: DesktopIcon { source: "preferences-system-bluetooth-symbolic"; color: panel.colors.text; isMask: true }
         }
         DesktopButton {
             colors: panel.colors; hint: panel.power.percent + "% · Живлення"; visible: panel.power.present
             onClicked: panel.desktop.openSettings("kcm_powerdevilprofilesconfig")
-            contentItem: Kirigami.Icon { source: "battery"; color: panel.colors.text; isMask: true }
+            contentItem: DesktopIcon { source: "battery"; color: panel.colors.text; isMask: true }
         }
     }
     ListView {
@@ -117,7 +116,7 @@ Item {
             colors: panel.colors; hint: modelData.title || "Значок трея"; width: 40; height: 40
             onClicked: panel.desktop.trayAction(modelData.id,"Activate")
             contentItem: Item {
-                Image { anchors.centerIn: parent; width: 22; height: 22; source: "image://desktop/" + encodeURIComponent(modelData.id) + "?" + modelData.revision + (panel.colors.light ? "&light" : "&dark"); sourceSize: Qt.size(22,22); fillMode: Image.PreserveAspectFit }
+                Image { anchors.centerIn: parent; width: Qt.platform.os === "windows" ? 16 : 22; height: width; source: "image://desktop/" + encodeURIComponent(modelData.id) + "?" + modelData.revision + (panel.colors.light ? "&light" : "&dark"); sourceSize: Qt.size(width,height); fillMode: Image.PreserveAspectFit }
             }
             opacity: modelData.status === "Passive" ? 0.6 : 1
             TapHandler { acceptedButtons: Qt.RightButton; onTapped: panel.desktop.trayAction(parent.modelData.id,"ContextMenu") }

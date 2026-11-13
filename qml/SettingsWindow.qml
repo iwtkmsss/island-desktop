@@ -8,6 +8,7 @@ Window {
     required property QtObject media
     required property QtObject monitors
     required property QtObject startup
+    required property QtObject taskbar
     required property QtObject hotkeys
     readonly property IslandColors colors: IslandColors { light: settings.model.theme === "light" }
     title: "Island Desktop — Налаштування"
@@ -28,5 +29,6 @@ Window {
         visible: settings.visible
         colors: settings.colors; model: settings.model; media: settings.media
         monitors: settings.monitors; startup: settings.startup; hotkeys: settings.hotkeys
+        taskbar: settings.taskbar
     }
 }

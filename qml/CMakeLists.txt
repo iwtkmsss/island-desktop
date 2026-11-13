@@ -19,6 +19,7 @@ endif()
 qt_add_executable(IslandDesktop WIN32
     ../src/main.cpp ../src/platform/shellgesture.cpp
     ../src/platform/desktopcontroller.h "${island_platform_dir}/desktopcontroller.cpp"
+    ../src/platform/taskbarcontroller.h "${island_platform_dir}/taskbarcontroller.cpp"
     ../src/platform/mediacontroller.h ../src/platform/shellcontroller.h
     ../src/platform/volumecontroller.h ../src/platform/audiocontroller.h
     ../src/platform/startupcontroller.h ../src/platform/hotkeycontroller.h
@@ -31,6 +32,16 @@ qt_add_executable(IslandDesktop WIN32
 target_include_directories(IslandDesktop PRIVATE "${PROJECT_SOURCE_DIR}/src/platform")
 set_target_properties(IslandDesktop PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}")
 target_link_libraries(IslandDesktop PRIVATE island_core Qt6::Quick Qt6::QuickControls2 Qt6::Widgets Qt6::Network)
+if(WIN32)
+    # Home panel: task list, Start-menu applications and the notification-area host.
+    target_sources(IslandDesktop PRIVATE ../src/core/tasklist.h
+        ../src/platform/windows/shellapps.cpp ../src/platform/windows/shellapps.h
+        ../src/platform/windows/taskwatcher.cpp ../src/platform/windows/taskwatcher.h
+        ../src/platform/windows/tasksmodel.h
+        ../src/platform/windows/trayhost.cpp ../src/platform/windows/trayhost.h)
+    target_sources(IslandDesktop PRIVATE ../src/platform/windows/taskbarguardian.cpp ../src/platform/windows/taskbarguardian.h)
+    target_include_directories(IslandDesktop PRIVATE "${PROJECT_SOURCE_DIR}/src/platform/windows")
+endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_sources(IslandDesktop PRIVATE ../src/platform/linux/pulseworker.cpp
         ../src/platform/linux/kwinpointer.cpp ../src/platform/linux/kwinpointer.h)
@@ -40,8 +51,13 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         LayerShellQt::Interface KF6::GlobalAccel KF6::WindowSystem PW::LibTaskManager KF6::Service KF6::KIOGui KF6::IconThemes)
 endif()
 set(island_qml_files)
-foreach(name Main SettingsWindow HomePage DesktopPanel DesktopButton IslandEyes IslandColors LineIcon ActionButton PlaybackIndicator TimePage ClockPage TimerPage MusicPage SettingsPage SoundSlider AudioMeter HotkeyField DevicesPage)
+foreach(name Main SettingsWindow HomePage DesktopPanel DesktopButton DesktopIcon IslandEyes IslandColors LineIcon ActionButton PlaybackIndicator TimePage ClockPage TimerPage MusicPage SettingsPage SoundSlider AudioMeter HotkeyField DevicesPage)
     set(qml_file "${PROJECT_SOURCE_DIR}/qml/${name}.qml")
+    # DesktopIcon is the one platform-specific QML type: Kirigami on Linux,
+    # the island's own line glyphs and shell icons on Windows.
+    if(WIN32 AND name STREQUAL "DesktopIcon")
+        set(qml_file "${PROJECT_SOURCE_DIR}/qml/windows/DesktopIcon.qml")
+    endif()
     set_source_files_properties("${qml_file}" PROPERTIES QT_RESOURCE_ALIAS "${name}.qml")
     list(APPEND island_qml_files "${qml_file}")
 endforeach()
@@ -53,7 +69,8 @@ qt_add_qml_module(IslandDesktop
 if(MSVC)
     target_compile_definitions(IslandDesktop PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
     target_compile_options(IslandDesktop PRIVATE /W4 /utf-8)
-    target_link_libraries(IslandDesktop PRIVATE windowsapp ole32 uuid user32 gdi32 setupapi cfgmgr32 bthprops)
+    target_link_libraries(IslandDesktop PRIVATE windowsapp ole32 uuid user32 gdi32 setupapi cfgmgr32 bthprops
+        shell32 dwmapi version)
 else()
     target_compile_options(IslandDesktop PRIVATE -Wall -Wextra -Wpedantic)
 endif()
