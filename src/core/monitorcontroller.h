@@ -14,6 +14,7 @@ class QWindow;
 class MonitorController final : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantList options READ options NOTIFY optionsChanged)
+    Q_PROPERTY(QString dockEdge READ dockEdge WRITE setDockEdge NOTIFY dockEdgeChanged)
     Q_PROPERTY(QString selectedId READ selectedId NOTIFY selectedIdChanged)
 public:
     using TopologyProvider = std::function<QList<MonitorInfo>()>;
@@ -25,6 +26,8 @@ public:
 
     QVariantList options() const { return options_; }
     QString selectedId() const { return selectedId_; }
+    QString dockEdge() const { return dockEdge_; }
+    void setDockEdge(const QString &edge);
     QString activeId() const { return activeId_; }
     void attach(QWindow *window);
     Q_INVOKABLE void selectMonitor(const QString &id);
@@ -34,6 +37,7 @@ public:
 
 signals:
     void optionsChanged();
+    void dockEdgeChanged();
     void selectedIdChanged();
     void activeMonitorChanged();
 
@@ -52,6 +56,7 @@ private:
     QPointer<QWindow> window_;
     QMetaObject::Connection windowScreenConnection_;
     QVariantList options_;
+    QString dockEdge_ = "top";
     QString selectedId_;
     QString savedLabel_;
     QString activeId_;

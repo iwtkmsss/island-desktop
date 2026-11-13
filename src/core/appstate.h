@@ -15,6 +15,8 @@ class AppState final : public QObject {
     Q_PROPERTY(bool reducedMotion READ reducedMotion WRITE setReducedMotion NOTIFY reducedMotionChanged)
     Q_PROPERTY(bool artworkGlow READ artworkGlow WRITE setArtworkGlow NOTIFY artworkGlowChanged)
     Q_PROPERTY(bool eyesEnabled READ eyesEnabled WRITE setEyesEnabled NOTIFY eyesEnabledChanged)
+    Q_PROPERTY(int passThroughSeconds READ passThroughSeconds WRITE setPassThroughSeconds NOTIFY passThroughSecondsChanged)
+    Q_PROPERTY(bool passThroughActive READ passThroughActive NOTIFY passThroughActiveChanged)
     Q_PROPERTY(bool expanded READ expanded WRITE setExpanded NOTIFY expandedChanged)
     Q_PROPERTY(bool settingsOpen READ settingsOpen WRITE setSettingsOpen NOTIFY settingsOpenChanged)
     Q_PROPERTY(QString clockTime READ clockTime NOTIFY clockChanged)
@@ -41,6 +43,8 @@ public:
     bool reducedMotion() const { return reducedMotion_; }
     bool artworkGlow() const { return artworkGlow_; }
     bool eyesEnabled() const { return eyesEnabled_; }
+    int passThroughSeconds() const { return passThroughSeconds_; }
+    bool passThroughActive() const { return passThroughActive_; }
     bool expanded() const { return expanded_; }
     bool settingsOpen() const { return settingsOpen_; }
     QString clockTime() const { return now_.toString("HH:mm"); }
@@ -67,6 +71,8 @@ public:
     void setReducedMotion(bool enabled);
     void setArtworkGlow(bool enabled);
     void setEyesEnabled(bool enabled);
+    void setPassThroughSeconds(int seconds);
+    Q_INVOKABLE void startPassThrough();
     void setExpanded(bool expanded);
     void setSettingsOpen(bool open);
     void showTemporaryEvent(const QString &title, int durationMs = 8000);
@@ -85,6 +91,8 @@ signals:
     void artworkGlowChanged();
     void eyesEnabledChanged();
     void expandedChanged();
+    void passThroughSecondsChanged();
+    void passThroughActiveChanged();
     void settingsOpenChanged();
     void clockChanged();
     void countdownChanged();
@@ -105,6 +113,10 @@ private:
     bool reducedMotion_ = false;
     bool artworkGlow_ = true;
     bool eyesEnabled_ = true;
+    int passThroughSeconds_ = 5;
+    bool passThroughActive_ = false;
+    qint64 passThroughUntil_ = 0;
+    QTimer passThroughTimer_;
     bool expanded_ = false;
     bool settingsOpen_ = false;
     QDateTime now_;

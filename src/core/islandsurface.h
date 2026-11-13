@@ -1,7 +1,6 @@
 #pragma once
 #include <QQuickPaintedItem>
 #include <QVariantList>
-#include <array>
 #include <QtQml/qqmlregistration.h>
 
 class IslandSurface : public QQuickPaintedItem {
@@ -9,6 +8,9 @@ class IslandSurface : public QQuickPaintedItem {
     QML_ELEMENT
     Q_PROPERTY(QColor surfaceColor MEMBER surfaceColor NOTIFY appearanceChanged)
     Q_PROPERTY(QColor inkColor MEMBER inkColor NOTIFY appearanceChanged)
+    Q_PROPERTY(QString dockEdge MEMBER dockEdge NOTIFY appearanceChanged)
+    Q_PROPERTY(bool halfEllipse MEMBER halfEllipse NOTIFY appearanceChanged)
+    Q_PROPERTY(qreal crownHeight MEMBER crownHeight NOTIFY appearanceChanged)
     Q_PROPERTY(qreal radius MEMBER radius NOTIFY appearanceChanged)
     Q_PROPERTY(qreal pointerX MEMBER pointerX NOTIFY appearanceChanged)
     Q_PROPERTY(qreal pointerY MEMBER pointerY NOTIFY appearanceChanged)
@@ -26,6 +28,9 @@ public:
     void setGlowColor(const QColor &color);
     void setGlowStrength(qreal strength);
     QColor surfaceColor = QColor("#060606"), inkColor = Qt::white;
+    QString dockEdge;
+    bool halfEllipse = false;
+    qreal crownHeight = 0;
     qreal radius = 26, pointerX = 0, pointerY = 0, proximity = 0, phase = 0, wave = 0;
     QVariantList bands;
 signals:
@@ -34,5 +39,4 @@ signals:
 private:
     QColor glowColor_;
     qreal glowStrength_ = 0;
-    std::array<double, 16> smoothedBands_{};
 };

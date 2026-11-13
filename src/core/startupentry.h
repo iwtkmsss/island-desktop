@@ -18,7 +18,7 @@ inline bool startupCommandMatches(const QString &registryValue, const QString &e
         value = close < 0 ? value.mid(1) : value.mid(1, close - 1);
     }
     const auto normalise = [](QString path) {
-        return QDir::toNativeSeparators(path.trimmed()).toLower();
+        return path.trimmed().replace(QLatin1Char('/'), QLatin1Char('\\')).toLower();
     };
     return normalise(value) == normalise(exePath);
 }

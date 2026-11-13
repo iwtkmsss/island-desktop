@@ -6,6 +6,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_INSTALL_BINDIR ".")
 find_package(Qt6 6.8 REQUIRED COMPONENTS Quick QuickControls2 Widgets Network)
 qt_standard_project_setup(REQUIRES 6.8)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    find_package(Qt6 REQUIRED COMPONENTS DBus)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse)
+    pkg_check_modules(XCBSHAPE REQUIRED IMPORTED_TARGET xcb-shape xcb)
+    find_package(KF6WindowSystem REQUIRED)
+    find_package(LibTaskManager REQUIRED)
+    find_package(KF6Service REQUIRED)
+    find_package(KF6KIO REQUIRED)
+endif()
 
 add_library(island_core STATIC
     src/core/appstate.cpp src/core/appstate.h
@@ -63,3 +73,44 @@ if(BUILD_TESTING)
 endif()
 
 
+
+if(BUILD_TESTING AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    qt_add_executable(linux_media_tests tests/linux_media_test.cpp
+        src/platform/linux/mediacontroller.cpp src/platform/mediacontroller.h
+        src/platform/linux/startupcontroller.cpp src/platform/startupcontroller.h
+        src/platform/linux/bluetoothcontroller.cpp src/platform/bluetoothcontroller.h)
+    target_include_directories(linux_media_tests PRIVATE src/platform src/platform/linux src/core)
+    target_link_libraries(linux_media_tests PRIVATE Qt6::Gui Qt6::Network Qt6::DBus Qt6::Test)
+    find_program(DBUS_RUN_SESSION dbus-run-session REQUIRED)
+    add_test(NAME island_linux_media COMMAND "${DBUS_RUN_SESSION}" -- "${PROJECT_SOURCE_DIR}/scripts/test-dbus.sh" $<TARGET_FILE:linux_media_tests>)
+    pkg_check_modules(PULSE_SIMPLE REQUIRED IMPORTED_TARGET libpulse-simple)
+    qt_add_executable(linux_pulse_tests tests/linux_pulse_test.cpp
+        src/platform/linux/pulseworker.cpp src/platform/linux/volumecontroller.cpp
+        src/platform/linux/audiocontroller.cpp src/platform/volumecontroller.h src/platform/audiocontroller.h)
+    target_include_directories(linux_pulse_tests PRIVATE src/platform src/platform/linux src/core)
+    target_link_libraries(linux_pulse_tests PRIVATE Qt6::Test PkgConfig::PULSE PkgConfig::PULSE_SIMPLE)
+    add_test(NAME island_linux_pulse COMMAND "${DBUS_RUN_SESSION}" -- "${PROJECT_SOURCE_DIR}/scripts/test-pulse.sh" $<TARGET_FILE:linux_pulse_tests>)
+    set_tests_properties(island_linux_media island_linux_pulse PROPERTIES TIMEOUT 60)
+endif()
+
+if(BUILD_TESTING AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    qt_add_executable(linux_pointer_tests tests/linux_pointer_test.cpp
+        src/platform/linux/kwinpointer.cpp src/platform/linux/kwinpointer.h
+        src/platform/linux/shellcontroller.cpp src/platform/shellgesture.cpp src/platform/shellcontroller.h)
+    target_include_directories(linux_pointer_tests PRIVATE src/platform src/platform/linux src/core)
+    target_link_libraries(linux_pointer_tests PRIVATE island_core Qt6::Quick Qt6::DBus Qt6::Test
+        PkgConfig::XCBSHAPE KF6::WindowSystem)
+    set_source_files_properties(src/platform/linux/kwin-pointer.js PROPERTIES QT_RESOURCE_ALIAS kwin-pointer.js)
+    qt_add_resources(linux_pointer_tests linux_pointer_test_resource PREFIX "/linux" FILES src/platform/linux/kwin-pointer.js)
+    add_test(NAME island_linux_pointer COMMAND "${DBUS_RUN_SESSION}" -- $<TARGET_FILE:linux_pointer_tests>)
+    set_tests_properties(island_linux_pointer PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+endif()
+
+if(BUILD_TESTING AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    qt_add_executable(linux_desktop_tests tests/linux_desktop_test.cpp src/platform/linux/desktopcontroller.cpp src/platform/desktopcontroller.h)
+    target_include_directories(linux_desktop_tests PRIVATE src/platform src/platform/linux)
+    target_compile_definitions(linux_desktop_tests PRIVATE ISLAND_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    target_link_libraries(linux_desktop_tests PRIVATE Qt6::Test Qt6::Widgets Qt6::DBus PW::LibTaskManager KF6::Service KF6::KIOGui KF6::WindowSystem)
+    add_test(NAME island_linux_desktop COMMAND "${DBUS_RUN_SESSION}" --config-file "${PROJECT_SOURCE_DIR}/tests/desktop-bus.conf" -- "${PROJECT_SOURCE_DIR}/scripts/test-dbus.sh" $<TARGET_FILE:linux_desktop_tests>)
+    set_tests_properties(island_linux_desktop PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+endif()

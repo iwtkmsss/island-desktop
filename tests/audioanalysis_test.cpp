@@ -61,6 +61,16 @@ private slots:
         QCOMPARE(analyzer.level(), 0.0f);
         for (const auto value : analyzer.bands()) QCOMPARE(value, 0.0f);
     }
+    void beatsReleaseBeforeTheNextBeat() {
+        Analyzer analyzer;
+        QVERIFY(analyzer.configure({SampleKind::Float32, 48000, 2, 8}));
+        const auto samples = tone(110, 0.6f, 4800);
+        analyzer.feed(samples.data(), 4800);
+        QVERIFY(analyzer.level() > 0.9f);
+        for (int packet = 0; packet < 16; ++packet) analyzer.feed(nullptr, 480, true);
+        QVERIFY(analyzer.level() < 0.08f);
+        for (const auto band : analyzer.bands()) QVERIFY(band < 0.03f);
+    }
     void lowAndHighTonesAppearInDifferentFrequencyBands() {
         Analyzer low, high;
         QVERIFY(low.configure({SampleKind::Float32, 48000, 2, 8}));

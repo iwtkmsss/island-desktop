@@ -13,6 +13,8 @@ MonitorController::MonitorController(const QString &settingsFile, TopologyProvid
     : QObject(parent), settings_(settingsFile, QSettings::IniFormat), provider_(std::move(provider)),
       selectedId_(settings_.value("display/monitorId").toString()),
       savedLabel_(settings_.value("display/monitorLabel").toString()) {
+    const auto edge = settings_.value("display/dockEdge", "top").toString();
+    if (validDockEdge(edge)) dockEdge_ = edge;
     refreshTimer_.setSingleShot(true);
     refreshTimer_.setInterval(50);
     connect(&refreshTimer_, &QTimer::timeout, this, &MonitorController::refresh);
@@ -100,6 +102,13 @@ void MonitorController::selectMonitor(const QString &id) {
     position();
 }
 
+void MonitorController::setDockEdge(const QString &edge) {
+    if (!validDockEdge(edge) || edge == dockEdge_) return;
+    dockEdge_ = edge;
+    settings_.setValue("display/dockEdge", edge); settings_.sync();
+    emit dockEdgeChanged(); position();
+}
+
 void MonitorController::position() {
     if (!applyingGeometry_) refreshTimer_.start();
 }
@@ -138,8 +147,8 @@ void MonitorController::applyWindowGeometry() {
     const int width = qRound(window_->property("frameWidth").toReal()) + 40;
     const int height = qRound(window_->property("frameHeight").toReal()) + 48;
     if (width <= 40 || height <= 48) return;
-    const auto available = target->availableGeometry();
+    const auto available = target->geometry();
     if (available.isEmpty()) return;
-    const auto next = monitorFrameRect(available, QSize(width, height));
+    const auto next = dockFrameRect(available, QSize(width, height), dockEdge_);
     if (window_->geometry() != next) window_->setGeometry(next);
 }

@@ -1,4 +1,5 @@
 #include "appstate.h"
+#include "desktopcontroller.h"
 #include "mediacontroller.h"
 #include "shellcontroller.h"
 #include "volumecontroller.h"
@@ -26,11 +27,17 @@
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <memory>
+#include <QElapsedTimer>
 #include <QQuickImageProvider>
 #include <QScreen>
 #include <QStandardPaths>
 #include <QSystemTrayIcon>
 #include <cstdio>
+#ifdef Q_OS_LINUX
+#include <LayerShellQt/Window>
+#include <KIconTheme>
+#endif
 
 static QIcon islandIcon() {
     QPixmap pixmap(64, 64);
@@ -59,9 +66,44 @@ private:
     MediaController *media_;
 };
 
+class DesktopIconProvider final : public QQuickImageProvider {
+public:
+    explicit DesktopIconProvider(DesktopController *desktop):QQuickImageProvider(QQuickImageProvider::Image),desktop_(desktop){}
+    QImage requestImage(const QString &id,QSize *size,const QSize &requested) override {
+        const auto key=QUrl::fromPercentEncoding(id.section('?',0,0).toUtf8());
+        const QSize dimensions=requested.isValid()?requested:QSize(32,32);
+        auto icon=desktop_->trayIcon(key);
+        if(icon.isNull()) icon=QIcon::fromTheme("application-x-executable");
+        auto image=icon.pixmap(dimensions).toImage();
+        if(image.isNull()){image=QImage(dimensions,QImage::Format_ARGB32_Premultiplied);image.fill(Qt::transparent);QPainter p(&image);p.setPen(QPen(Qt::gray,2));p.drawRoundedRect(image.rect().adjusted(3,3,-3,-3),4,4);}
+        // Uniform monochrome tray glyphs must contrast with the island's theme.
+        int monochrome=0,colored=0,lowest=255,highest=0;
+        for(int y=0;y<image.height();++y)for(int x=0;x<image.width();++x){const auto c=image.pixelColor(x,y);if(c.alpha()<20)continue;
+            if(qMax(c.red(),qMax(c.green(),c.blue()))-qMin(c.red(),qMin(c.green(),c.blue()))>12){++colored;continue;}
+            ++monochrome;lowest=qMin(lowest,c.red());highest=qMax(highest,c.red());
+        }
+        if(monochrome>0&&colored*4<=monochrome&&highest-lowest<65){const int tone=id.contains("&light")?30:235;
+            image=image.convertToFormat(QImage::Format_ARGB32);
+            for(int y=0;y<image.height();++y)for(int x=0;x<image.width();++x){const auto c=image.pixelColor(x,y);if(qMax(c.red(),qMax(c.green(),c.blue()))-qMin(c.red(),qMin(c.green(),c.blue()))<=12)image.setPixelColor(x,y,QColor(tone,tone,tone,c.alpha()));}
+        }
+        if(size) *size=image.size();
+        return image;
+    }
+private: DesktopController *desktop_;
+};
+
 int main(int argc, char *argv[]) {
     qputenv("QT_FORCE_STDERR_LOGGING", "1");
+#ifdef Q_OS_LINUX
+    // Keep launchers and autostart consistent with run.sh. Native Wayland can
+    // be selected explicitly with QT_QPA_PLATFORM=wayland.
+    if (!qEnvironmentVariableIsSet("QT_QPA_PLATFORM") && !qEnvironmentVariableIsEmpty("DISPLAY"))
+        qputenv("QT_QPA_PLATFORM", "xcb");
+#endif
     QQuickWindow::setDefaultAlphaBuffer(true);
+    #ifdef Q_OS_LINUX
+    KIconTheme::initTheme();
+#endif
     QApplication app(argc, argv);
     app.setOrganizationName("IslandDesktop");
     app.setApplicationName("IslandDesktop");
@@ -69,11 +111,15 @@ int main(int argc, char *argv[]) {
     app.setApplicationVersion("0.3.1");
     app.setQuitOnLastWindowClosed(false);
     app.setWindowIcon(islandIcon());
+#ifdef Q_OS_WIN
     app.setFont(QFont("Segoe UI Variable Text", 10));
+#else
+    app.setDesktopFileName("io.github.iwtkmsss.island-desktop");
+#endif
     QQuickStyle::setStyle("Basic");
 
     QCommandLineParser parser;
-    parser.setApplicationDescription(QStringLiteral("Island Desktop — прототип для Windows"));
+    parser.setApplicationDescription(QStringLiteral("Island Desktop"));
     parser.addHelpOption();
     parser.addVersionOption();
     parser.addOption({"settings", "Use a separate settings file (development).", "file"});
@@ -119,7 +165,11 @@ int main(int argc, char *argv[]) {
     if (parser.isSet("section")) state.setSection(parser.value("section"));
     if (parser.isSet("theme")) state.setTheme(parser.value("theme"));
     state.setExpanded(parser.isSet("expanded"));
+    DesktopController desktop(settingsFile);
     MediaController media(settingsFile);
+    QObject::connect(&desktop, &DesktopController::errorChanged, &state, [&] {
+        if (!desktop.error().isEmpty()) state.postEvent({"desktop", desktop.error(), "notice", 40, 5000, "desktop-error"});
+    });
     VolumeController volume;
     AudioController audio;
     MonitorController monitors(settingsFile);
@@ -134,7 +184,7 @@ int main(int argc, char *argv[]) {
     if (parser.isSet("pin")) interaction.setPinned(true);
     QObject::connect(&volume, &VolumeController::volumeEvent, &state, [&](int value, bool muted) {
         // The expanded sound/music pages already show their live controls.
-        if (!state.expanded() || state.section() != "media" || state.settingsOpen())
+        if (!state.expanded() || state.section() != "media")
             state.showVolumeEvent(value, muted);
     });
 
@@ -152,19 +202,60 @@ int main(int argc, char *argv[]) {
         qmlWarningCount += warnings.size();
     });
     engine.addImageProvider("media", new ArtworkProvider(&media));
-    engine.setInitialProperties({{"model", QVariant::fromValue(&state)},
+    engine.addImageProvider("desktop", new DesktopIconProvider(&desktop));
+    QVariantMap initialProperties{{"desktop", QVariant::fromValue(&desktop)}, {"model", QVariant::fromValue(&state)},
         {"media", QVariant::fromValue(&media)}, {"interaction", QVariant::fromValue(&interaction)},
         {"volume", QVariant::fromValue(&volume)}, {"audio", QVariant::fromValue(&audio)},
         {"monitors", QVariant::fromValue(&monitors)},
-        {"startup", QVariant::fromValue(&startup)}, {"hotkeys", QVariant::fromValue(&hotkeys)},
-        {"power", QVariant::fromValue(&power)}, {"bluetooth", QVariant::fromValue(&bluetooth)}});
+        {"power", QVariant::fromValue(&power)}, {"bluetooth", QVariant::fromValue(&bluetooth)}};
+#ifdef Q_OS_LINUX
+    initialProperties.insert("visible", false);
+#endif
+    engine.setInitialProperties(initialProperties);
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app, [] {
         QCoreApplication::exit(1);
     }, Qt::QueuedConnection);
     engine.loadFromModule("Island", "Main");
     if (engine.rootObjects().isEmpty()) return 1;
     auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+    if (qEnvironmentVariableIsSet("ISLAND_AUDIO_TRACE") && window) {
+        // Development trace: worst interval between presented frames per second.
+        auto *clock = new QElapsedTimer; clock->start();
+        auto last = std::make_shared<qint64>(0), worst = std::make_shared<qint64>(0), reported = std::make_shared<qint64>(0);
+        auto frames = std::make_shared<int>(0);
+        QObject::connect(window, &QQuickWindow::frameSwapped, window, [=] {
+            const auto now = clock->elapsed();
+            if (*last) *worst = std::max(*worst, now - *last);
+            *last = now; ++*frames;
+            if (now - *reported >= 1000) {
+                std::fprintf(stderr, "audio-trace render fps=%d frame-gap-max=%lldms\n", *frames, (long long)*worst);
+                *worst = 0; *reported = now; *frames = 0;
+            }
+        }, Qt::DirectConnection);
+    }
     if (!window) return 1;
+#ifdef Q_OS_LINUX
+    if (QGuiApplication::platformName().startsWith("wayland")) {
+        auto *layer = LayerShellQt::Window::get(window);
+        layer->setScope("island-desktop");
+        layer->setScreen(window->screen());
+        QObject::connect(window, &QWindow::screenChanged, layer, &LayerShellQt::Window::setScreen);
+        const auto anchor = [&monitors, layer] {
+            const auto edge = monitors.dockEdge();
+            layer->setAnchors(edge == "bottom" ? LayerShellQt::Window::AnchorBottom
+                : edge == "left" ? LayerShellQt::Window::AnchorLeft
+                : edge == "right" ? LayerShellQt::Window::AnchorRight : LayerShellQt::Window::AnchorTop);
+        };
+        anchor();
+        QObject::connect(&monitors, &MonitorController::dockEdgeChanged, layer, anchor);
+        layer->setLayer(LayerShellQt::Window::LayerTop);
+        layer->setExclusiveZone(-1);
+        layer->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityOnDemand);
+        layer->setActivateOnShow(false);
+        layer->setCloseOnDismissed(false);
+    }
+#endif
+    window->setProperty("pointerBridgeKey", QString::fromLatin1(identity));
     interaction.attach(window);
     if (parser.isSet("inspect-ui")) {
         window->setFlags(Qt::Window | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
@@ -172,8 +263,20 @@ int main(int argc, char *argv[]) {
     }
     QObject::connect(&interaction, &ShellController::frameRequested, &monitors, &MonitorController::position);
     monitors.attach(window);
+#ifdef Q_OS_LINUX
+    window->show();
+#endif
+
+    engine.setInitialProperties({{"model", QVariant::fromValue(&state)}, {"media", QVariant::fromValue(&media)},
+        {"monitors", QVariant::fromValue(&monitors)}, {"startup", QVariant::fromValue(&startup)}, {"hotkeys", QVariant::fromValue(&hotkeys)}});
+    engine.loadFromModule("Island", "SettingsWindow");
+    if (engine.rootObjects().size() != 2) return 1;
+    auto *settingsWindow = qobject_cast<QQuickWindow *>(engine.rootObjects().last());
+    if (!settingsWindow) return 1;
+    settingsWindow->setTransientParent(nullptr);
 
     const auto showIsland = [&] {
+        if (state.passThroughActive()) return;
         window->show();
         window->raise();
         window->requestActivate();
@@ -201,8 +304,7 @@ int main(int argc, char *argv[]) {
     menu.addSeparator();
     menu.addAction(QStringLiteral("Налаштування"), &app, [&] {
         state.setSettingsOpen(true);
-        interaction.open();
-        showIsland();
+        settingsWindow->show(); settingsWindow->raise(); settingsWindow->requestActivate();
     });
     menu.addSeparator();
     menu.addAction(QStringLiteral("Вийти"), &app, &QCoreApplication::quit);
@@ -243,20 +345,37 @@ int main(int argc, char *argv[]) {
             if (parser.isSet("screenshot")) {
                 const auto path = QFileInfo(parser.value("screenshot")).absoluteFilePath();
                 QDir().mkpath(QFileInfo(path).absolutePath());
-                saved = window->grabWindow().save(path) && saved;
+                auto *captureWindow = settingsWindow->isVisible() ? settingsWindow : window;
+                saved = captureWindow->grabWindow().save(path) && saved;
             }
             if (parser.isSet("diagnostics")) {
                 const auto path = QFileInfo(parser.value("diagnostics")).absoluteFilePath();
                 QDir().mkpath(QFileInfo(path).absolutePath());
                 const QJsonObject report{{"version", app.applicationVersion()}, {"section", state.section()},
-                    {"monitors", QJsonObject{{"selectedId", monitors.selectedId()},
+                    {"platform", QGuiApplication::platformName()},
+                    {"desktop", QJsonObject{{"available", desktop.available()}, {"tasks", desktop.tasks() ? desktop.tasks()->rowCount() : 0},
+                        {"trayItems", int(desktop.trayItems().size())}, {"menuOpen", desktop.menuOpen()}, {"metrics", desktop.metrics()}, {"error", desktop.error()}}},
+                    {"media", QJsonObject{{"available", media.available()}, {"playing", media.playing()},
+                        {"canToggle", media.canToggle()}, {"canSeek", media.canSeek()},
+                        {"sourcesCount", int(media.sources().size())}, {"error", media.error()}}},
+                    {"monitors", QJsonObject{{"selectedId", monitors.selectedId()}, {"dockEdge", monitors.dockEdge()},
+                        {"frameX", window->x()}, {"frameY", window->y()}, {"frameWidth", window->width()}, {"frameHeight", window->height()},
+                        {"screenX", window->screen() ? window->screen()->geometry().x() : 0},
+                        {"screenY", window->screen() ? window->screen()->geometry().y() : 0},
+                        {"screenWidth", window->screen() ? window->screen()->geometry().width() : 0},
+                        {"screenHeight", window->screen() ? window->screen()->geometry().height() : 0},
                         {"screenName", window->screen() ? window->screen()->name() : QString{}},
                         {"optionsCount", static_cast<int>(monitors.options().size())}}},
                     {"volume", QJsonObject{{"available", volume.available()}, {"percent", volume.volume()}, {"muted", volume.muted()}, {"device", volume.deviceName()}, {"error", volume.error()}}},
                     {"audio", QJsonObject{{"enabled", audio.enabled()}, {"available", audio.available()}, {"active", audio.active()}, {"level", audio.level()}, {"bands", QJsonArray::fromVariantList(audio.bands())}, {"error", audio.error()}}},
                     {"power", QJsonObject{{"present", power.present()}, {"percent", power.percent()}, {"charging", power.charging()}}},
                     {"bluetooth", QJsonObject{{"available", bluetooth.available()}, {"connectedCount", bluetooth.connectedCount()}, {"deviceCount", static_cast<int>(bluetooth.devices().size())}}},
-                    {"shell", QJsonObject{{"expanded", state.expanded()}, {"pinned", interaction.pinned()}, {"suppressed", interaction.property("suppressed").toBool()}}}};
+                    {"shell", QJsonObject{{"expanded", state.expanded()}, {"passThrough", state.passThroughActive()},
+                        {"passThroughSeconds", state.passThroughSeconds()},
+                        {"shellWidth", window->property("shellWidth").toDouble()}, {"shellHeight", window->property("shellHeight").toDouble()},
+                        {"shellX", window->property("shellX").toDouble()}, {"shellY", window->property("shellY").toDouble()}, {"islandVisible", window->isVisible()},
+                        {"settingsVisible", settingsWindow->isVisible()}, {"pinned", interaction.pinned()}, {"suppressed", interaction.property("suppressed").toBool()},
+                        {"globalPointer", window->property("globalPointerAvailable").toBool()}, {"pointerActivity", qint64(interaction.pointerActivity())}}}};
                 QSaveFile file(path);
                 const bool opened = file.open(QIODevice::WriteOnly);
                 if (opened) { file.write(QJsonDocument(report).toJson()); saved = file.commit() && saved; }

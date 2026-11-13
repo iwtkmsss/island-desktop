@@ -156,6 +156,40 @@ private slots:
         QCOMPARE(resolvedMonitorId(topology, first), first);
     }
 
+    void dockChoicePersistsWithoutChangingMonitorOrSection() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("dock.ini");
+        const QList<MonitorInfo> topology{{"screen", "Main", true}};
+        {
+            MonitorController monitor(path, [&] { return topology; });
+            QCOMPARE(monitor.dockEdge(), "top");
+            monitor.selectMonitor("screen");
+            QSignalSpy changed(&monitor, &MonitorController::dockEdgeChanged);
+            for (const auto &edge : {"left", "right", "bottom", "top", "left"}) monitor.setDockEdge(edge);
+            QCOMPARE(changed.count(), 5);
+            monitor.setDockEdge("left"); monitor.setDockEdge("invalid");
+            QCOMPARE(changed.count(), 5);
+            QCOMPARE(monitor.selectedId(), "screen");
+        }
+        MonitorController restored(path, [&] { return topology; });
+        QCOMPARE(restored.dockEdge(), "left");
+        QCOMPARE(restored.selectedId(), "screen");
+    }
+
+    void dockFrameTouchesAllFourPhysicalScreenEdges() {
+        const QRect screen(-1920, -200, 1920, 1080);
+        const QSize frame(560, 444);
+        const auto top = dockFrameRect(screen, frame, "top");
+        const auto bottom = dockFrameRect(screen, frame, "bottom");
+        const auto left = dockFrameRect(screen, frame, "left");
+        const auto right = dockFrameRect(screen, frame, "right");
+        QCOMPARE(top.top(), screen.top()); QCOMPARE(bottom.bottom(), screen.bottom());
+        QCOMPARE(left.left(), screen.left()); QCOMPARE(right.right(), screen.right());
+        for (const auto &rect : {top, bottom, left, right}) {
+            QCOMPARE(rect.size(), frame); QVERIFY(screen.contains(rect));
+        }
+    }
+
     void fixedFrameUsesLogicalMonitorCoordinatesIncludingNegativeOrigins() {
         const QSize frame(560, 444);
         QCOMPARE(monitorFrameRect(QRect(-1920, -200, 1920, 1040), frame), QRect(-1240, -198, 560, 444));

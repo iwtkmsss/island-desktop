@@ -138,7 +138,8 @@ public:
         rawRms_ = static_cast<float>(std::sqrt(squared / (static_cast<double>(frames) * format_.channels)));
         const float amplitude = std::clamp(rawRms_ * 4.0f, 0.0f, 1.0f);
         const float seconds = static_cast<float>(frames) / format_.sampleRate;
-        const float residual = amplitude > level_ ? 0.3f : 0.85f;
+        // Fast attack and a ~56 ms release keep separate beats readable.
+        const float residual = amplitude > level_ ? 0.3f : 0.75f;
         level_ = amplitude + (level_ - amplitude) * std::pow(residual, seconds / 0.016f);
         if (level_ < 0.0001f) level_ = 0;
         return produced;
@@ -147,8 +148,8 @@ public:
     void decay(double seconds) {
         if (!std::isfinite(seconds) || seconds <= 0) return;
         rawRms_ = 0;
-        level_ *= static_cast<float>(std::pow(0.85, seconds / 0.016));
-        const auto fade = static_cast<float>(std::pow(0.88, seconds / 0.016));
+        level_ *= static_cast<float>(std::pow(0.75, seconds / 0.016));
+        const auto fade = static_cast<float>(std::pow(0.75, seconds * format_.sampleRate / hopSize));
         for (auto &band : bands_) { band *= fade; if (band < 0.0001f) band = 0; }
         if (level_ < 0.0001f) level_ = 0;
     }
@@ -199,7 +200,7 @@ private:
         for (std::size_t band = 0; band < bandCount; ++band) {
             float value = std::sqrt(std::clamp(raw[band] / std::max(gain_, 0.02f), 0.0f, 1.0f));
             value *= std::clamp(peak * 40.0f, 0.0f, 1.0f);
-            bands_[band] += (value > bands_[band] ? 0.65f : 0.14f) * (value - bands_[band]);
+            bands_[band] += (value > bands_[band] ? 0.65f : 0.25f) * (value - bands_[band]);
             if (bands_[band] < 0.0001f) bands_[band] = 0;
         }
     }

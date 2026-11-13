@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Island Desktop
+Comment=Dynamic desktop island
+Exec=IslandDesktop
+Icon=applications-utilities
+Terminal=false
+Categories=Utility;
+StartupNotify=false

@@ -42,6 +42,16 @@ AppState::AppState(const QString &settingsFile, QObject *parent)
     reducedMotion_ = settings_.value("ui/reducedMotion", false).toBool();
     artworkGlow_ = settings_.value("ui/artworkGlow", true).toBool();
     eyesEnabled_ = settings_.value("ui/eyesEnabled", true).toBool();
+    const int passSeconds = settings_.value("ui/passThroughSeconds", 5).toInt();
+    if (passSeconds >= 1 && passSeconds <= 300) passThroughSeconds_ = passSeconds;
+    passThroughTimer_.setSingleShot(true);
+    connect(&passThroughTimer_, &QTimer::timeout, this, [this] {
+        const qint64 remaining = passThroughUntil_ - monotonic_.elapsed();
+        if (remaining > 0) { passThroughTimer_.start(int(remaining)); return; }
+        if (!passThroughActive_) return;
+        passThroughActive_ = false;
+        emit passThroughActiveChanged();
+    });
     const int savedMinutes = settings_.value("timer/minutes", 25).toInt();
     if (savedMinutes >= 1 && savedMinutes <= 180)
         countdown_.configure(static_cast<qint64>(savedMinutes) * 60000);
@@ -160,12 +170,26 @@ void AppState::setEyesEnabled(bool enabled) {
     emit eyesEnabledChanged();
 }
 
+void AppState::setPassThroughSeconds(int seconds) {
+    if (seconds < 1 || seconds > 300 || passThroughSeconds_ == seconds) return;
+    passThroughSeconds_ = seconds; persist("ui/passThroughSeconds", seconds);
+    emit passThroughSecondsChanged();
+}
+
+void AppState::startPassThrough() {
+    passThroughUntil_ = monotonic_.elapsed() + passThroughSeconds_ * 1000;
+    passThroughTimer_.start(passThroughSeconds_ * 1000);
+    const bool collapsed = expanded_;
+    expanded_ = false;
+    if (!passThroughActive_) { passThroughActive_ = true; emit passThroughActiveChanged(); }
+    if (collapsed) emit expandedChanged();
+}
+
 void AppState::setExpanded(bool expanded) {
+    if (expanded && passThroughActive_) return;
     if (expanded_ == expanded)
         return;
     expanded_ = expanded;
-    if (!expanded)
-        setSettingsOpen(false);
     emit expandedChanged();
 }
 
@@ -173,8 +197,6 @@ void AppState::setSettingsOpen(bool open) {
     if (settingsOpen_ == open)
         return;
     settingsOpen_ = open;
-    if (open)
-        setExpanded(true);
     emit settingsOpenChanged();
 }
 

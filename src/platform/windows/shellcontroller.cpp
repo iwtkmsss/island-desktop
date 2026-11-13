@@ -1,5 +1,6 @@
 #include "shellcontroller.h"
 #include "appstate.h"
+#include "islandshape.h"
 #include <QCursor>
 #include <QCoreApplication>
 #include <QDebug>
@@ -60,16 +61,20 @@ bool foregroundFillsIslandMonitor(QQuickWindow *island) {
 #endif
 }
 
+bool ShellController::eventFilter(QObject *watched, QEvent *event) {
+    return watched == window_ && handleDoubleClick(event);
+}
+
 ShellController::ShellController(AppState *state, QObject *parent) : QObject(parent), state_(state) {
     clock_.start();
     connect(&ticker_, &QTimer::timeout, this, &ShellController::poll);
+    connect(state_, &AppState::passThroughActiveChanged, this, &ShellController::updatePassThrough);
     const auto resetInactiveGaze = [this] {
         if (!gazeTrackingEnabled()) resetGaze();
     };
     connect(state_, &AppState::sectionChanged, this, resetInactiveGaze);
     connect(state_, &AppState::eyesEnabledChanged, this, resetInactiveGaze);
     connect(state_, &AppState::reducedMotionChanged, this, resetInactiveGaze);
-    connect(state_, &AppState::settingsOpenChanged, this, resetInactiveGaze);
     connect(state_, &AppState::eventChanged, this, resetInactiveGaze);
     connect(state_, &AppState::expandedChanged, this, [this] {
         if (!state_->expanded()) {
@@ -87,8 +92,10 @@ ShellController::ShellController(AppState *state, QObject *parent) : QObject(par
 ShellController::~ShellController() { setNativeInputSuppressed(false); }
 void ShellController::attach(QQuickWindow *window) {
     window_ = window;
+    window->installEventFilter(this);
     resetGaze();
     connect(window, &QWindow::visibleChanged, this, [this] {
+        if (window_ && window_->isVisible()) setNativeInputSuppressed(suppressed_ || state_->passThroughActive());
         if (!gazeTrackingEnabled()) resetGaze();
     });
     connect(window, &QWindow::xChanged, this, [this] { geometryChanged_ = true; });
@@ -104,14 +111,17 @@ void ShellController::attach(QQuickWindow *window) {
     holdUntil_ = clock_.elapsed() + 1800;
     ignorePressUntilRelease_ = state_->expanded();
     ticker_.start(50);
+    if (state_->passThroughActive()) updatePassThrough();
 }
 void ShellController::setPinned(bool pinned) {
+    if (pinned && state_->passThroughActive()) return;
     if (pinned_ == pinned) return;
     pinned_ = pinned;
     if (pinned) state_->setExpanded(true);
     emit pinnedChanged();
 }
 void ShellController::open() {
+    if (state_->passThroughActive()) return;
     interaction_.suspend();
     holdUntil_ = clock_.elapsed() + 1800;
     ignorePressUntilRelease_ = true;
@@ -133,7 +143,7 @@ void ShellController::setSuppressed(bool suppressed) {
     if (!suppressed && state_->expanded()) holdUntil_ = clock_.elapsed() + 1800;
     proximity_.reset(0);
     geometryChanged_ = true;
-    setNativeInputSuppressed(suppressed);
+    setNativeInputSuppressed(suppressed || state_->passThroughActive());
     emit pointerChanged();
     emit suppressionChanged();
 }
@@ -200,7 +210,7 @@ void ShellController::setNativeInputSuppressed(bool suppressed) {
 // Copyright (c) 2026 devcode90, MIT; third_party/dynamic-island/LICENSE.
 void ShellController::setClickThrough(bool clickThrough) {
 #ifdef Q_OS_WIN
-    if (!window_ || suppressed_ || suppressedWindowId_) return; // fullscreen suppression owns the bit
+    if (!window_ || suppressed_ || state_->passThroughActive() || suppressedWindowId_) return; // fullscreen suppression owns the bit
     const auto hwnd = reinterpret_cast<HWND>(window_->winId());
     const LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
     if (((style & WS_EX_TRANSPARENT) != 0) == clickThrough) return;
@@ -230,9 +240,9 @@ void ShellController::refreshHoverAfterGeometryChange(bool pressed) {
 }
 
 bool ShellController::gazeTrackingEnabled() const {
-    return window_ && window_->isVisible() && !suppressed_
+    return window_ && window_->isVisible() && !suppressed_ && !state_->passThroughActive()
         && state_->section() == QStringLiteral("home") && state_->eyesEnabled()
-        && !state_->reducedMotion() && !state_->settingsOpen()
+        && !state_->reducedMotion()
         && state_->eventTitle().isEmpty();
 }
 
@@ -251,7 +261,7 @@ void ShellController::poll() {
         setSuppressed(foregroundFillsIslandMonitor(window_));
 #endif
     }
-    if (!window_->isVisible() || suppressed_) {
+    if (!window_->isVisible() || suppressed_ || state_->passThroughActive()) {
         resetGaze();
         interaction_.suspend();
         wasPressed_ = false;
@@ -262,20 +272,20 @@ void ShellController::poll() {
     const qreal width = window_->property("shellWidth").toReal();
     const qreal height = window_->property("shellHeight").toReal();
     const QPointF globalCursor = QCursor::pos();
-    const QPointF shellOrigin = QPointF(window_->position()) + QPointF(window_->property("shellX").toReal(), 16);
+    const QPointF shellOrigin = QPointF(window_->position()) + QPointF(window_->property("shellX").toReal(), window_->property("shellY").toReal());
     const QPointF cursor = globalCursor - shellOrigin;
     // Independent of edge springs and their nearby early return. Track both
     // compact and expanded Home, using the selected island monitor's scale.
     if (gazeTrackingEnabled()) {
         const auto *screen = window_->screen();
         const QSizeF screenSize = screen ? QSizeF(screen->geometry().size()) : QSizeF(1920, 1080);
-        if (gaze_.sample(globalCursor, shellOrigin + QPointF(width / 2, height / 2), screenSize))
+        if (gaze_.sample(globalCursor, shellOrigin + QPointF(width / 2, window_->property("eyeCenterY").isValid() ? window_->property("eyeCenterY").toReal() : height / 2), screenSize))
             emit gazeChanged();
     } else resetGaze();
     const QRectF body(0, 0, width, height);
-    QPainterPath target;
     const qreal grace = state_->expanded() ? 14 : 0;
-    target.addRoundedRect(body.adjusted(-grace, -grace, grace, grace), 24, 24);
+    const auto target = islandBodyPath(body.adjusted(-grace, -grace, grace, grace), 24,
+        QString{}, false, window_->property("crownHeight").toReal());
     const bool inside = target.contains(cursor);
     const bool nearby = body.adjusted(-24, -24, 24, 24).contains(cursor);
     bool pressed = QGuiApplication::mouseButtons() != Qt::NoButton;
@@ -283,12 +293,13 @@ void ShellController::poll() {
     pressed = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) || (GetAsyncKeyState(VK_RBUTTON) & 0x8000);
 #endif
     // The frame is fixed at the expanded size; only the visible shell takes input.
-    setClickThrough(!body.adjusted(-2, -2, 2, 2).contains(cursor));
+    setClickThrough(!islandBodyPath(body.adjusted(-2, -2, 2, 2), 24,
+        QString{}, false, window_->property("crownHeight").toReal()).contains(cursor));
     if (!pressed) ignorePressUntilRelease_ = false;
-    if (pressed && !wasPressed_ && !ignorePressUntilRelease_ && !inside && state_->expanded() && !pinned_) close();
+    if (pressed && !wasPressed_ && !ignorePressUntilRelease_ && !inside && state_->expanded() && !pinned_ && !window_->property("interactionHold").toBool()) close();
     wasPressed_ = pressed;
     refreshHoverAfterGeometryChange(pressed);
-    const auto action = interaction_.update({inside, state_->expanded(), pinned_ || now < holdUntil_, pressed}, now);
+    const auto action = interaction_.update({inside, state_->expanded(), pinned_ || window_->property("interactionHold").toBool() || now < holdUntil_, pressed}, now);
     if (action == ShellInteraction::Action::Open) {
         hoverOpening_ = true;
         state_->setExpanded(true);

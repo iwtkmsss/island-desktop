@@ -275,12 +275,54 @@ private slots:
         state.dismissEvent();
         QCOMPARE(state.section(), "time");
         state.setSettingsOpen(true);
-        QVERIFY(state.expanded());
+        QVERIFY(!state.expanded());
+        state.setExpanded(true);
         state.setExpanded(false);
+        QVERIFY(state.settingsOpen());
+        state.setSettingsOpen(false);
         QVERIFY(!state.settingsOpen());
         QCOMPARE(state.section(), "time");
         QCOMPARE(state.timeView(), "timer");
     }
+    void passThroughDurationPersistsButActiveStateDoesNot() {
+        QTemporaryDir dir; const auto path = dir.filePath("pass.ini");
+        {
+            AppState state(path);
+            QCOMPARE(state.passThroughSeconds(), 5);
+            QSignalSpy changed(&state, &AppState::passThroughSecondsChanged);
+            state.setPassThroughSeconds(12); state.setPassThroughSeconds(12);
+            state.setPassThroughSeconds(0); state.setPassThroughSeconds(301);
+            QCOMPARE(state.passThroughSeconds(), 12); QCOMPARE(changed.count(), 1);
+            state.setSection("media"); state.startPassThrough();
+            QVERIFY(state.passThroughActive());
+        }
+        AppState restored(path);
+        QCOMPARE(restored.passThroughSeconds(), 12);
+        QVERIFY(!restored.passThroughActive());
+        QCOMPARE(restored.section(), "media");
+    }
+
+    void passThroughCollapsesAndExpiresWithoutTouchingTimerOrSettings() {
+        QTemporaryDir dir; AppState state(dir.filePath("pass.ini"));
+        state.setSection("time"); state.setTimeView("timer");
+        state.setTimerMinutes(1); state.toggleTimer();
+        state.setSettingsOpen(true); state.setExpanded(true); state.setPassThroughSeconds(1);
+        QSignalSpy active(&state, &AppState::passThroughActiveChanged);
+        QElapsedTimer elapsed; elapsed.start(); state.startPassThrough();
+        QVERIFY(state.passThroughActive()); QVERIFY(!state.expanded());
+        QVERIFY(state.settingsOpen()); QCOMPARE(state.timerState(), "running");
+        state.setExpanded(true); QVERIFY(!state.expanded());
+        state.setPassThroughSeconds(2); // Applies to the next activation, not this deadline.
+        state.showVolumeEvent(40, false);
+        QVERIFY(state.passThroughActive());
+        QTest::qWait(850); QVERIFY(state.passThroughActive());
+        QTRY_VERIFY_WITH_TIMEOUT(!state.passThroughActive(), 1000);
+        QVERIFY(elapsed.elapsed() >= 1000);
+        QCOMPARE(active.count(), 2); QVERIFY(!state.expanded());
+        QCOMPARE(state.section(), "time"); QCOMPARE(state.timeView(), "timer");
+        QCOMPARE(state.timerState(), "running"); QVERIFY(state.settingsOpen());
+    }
+
     void preferencesSurviveRestart() {
         QTemporaryDir dir;
         const auto path = dir.filePath("settings.ini");

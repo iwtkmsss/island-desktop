@@ -62,3 +62,16 @@ inline QRect monitorFrameRect(const QRect &available, const QSize &frame) {
     return {available.x() + (available.width() - frame.width()) / 2,
         available.y() + 2, frame.width(), frame.height()};
 }
+
+inline bool validDockEdge(const QString &edge) {
+    return edge == "top" || edge == "bottom" || edge == "left" || edge == "right";
+}
+inline QRect dockFrameRect(const QRect &screen, const QSize &frame, const QString &edge) {
+    int x = screen.x() + (screen.width()-frame.width())/2;
+    int y = screen.y() + (screen.height()-frame.height())/2;
+    if (edge == "left") x = screen.left();
+    else if (edge == "right") x = screen.right()+1-frame.width();
+    else if (edge == "bottom") y = screen.bottom()+1-frame.height();
+    else y = screen.top();
+    return {QPoint(x, y), frame};
+}

@@ -46,6 +46,18 @@ private slots:
         QCOMPARE(gaze.activity(), quint64(1));
     }
 
+    void coalescedRoundTripStillCountsAsMovement() {
+        CursorGaze gaze;
+        gaze.sample({900, 600}, {500, 100}, {1920, 1080});
+        QVERIFY(gaze.sample({900, 600}, {500, 100}, {1920, 1080}, true));
+        QCOMPARE(gaze.activity(), quint64(1));
+        QVERIFY(!gaze.sample({900, 600}, {500, 100}, {1920, 1080}));
+        QCOMPARE(gaze.activity(), quint64(1));
+        gaze.reset();
+        gaze.sample({900, 600}, {500, 100}, {1920, 1080}, true);
+        QCOMPARE(gaze.activity(), quint64(1)); // First sample establishes a baseline.
+    }
+
     void stationaryDoesNotKeepEyesAwake() {
         CursorGaze gaze;
         gaze.sample({1500, 600}, {500, 100}, {1920, 1080});

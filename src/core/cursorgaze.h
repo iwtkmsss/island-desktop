@@ -12,10 +12,10 @@ public:
     qreal y() const { return y_; }
     quint64 activity() const { return activity_; }
 
-    bool sample(QPointF global, QPointF center, QSizeF screenSize) {
+    bool sample(QPointF global, QPointF center, QSizeF screenSize, bool observedMovement = false) {
         // Count raw movement, including movement beyond the clamped gaze range.
         // The first sample after inactivity establishes a baseline, not activity.
-        const bool moved = hasPosition_ && global != lastPosition_;
+        const bool moved = hasPosition_ && (global != lastPosition_ || observedMovement);
         lastPosition_ = global;
         hasPosition_ = true;
         if (moved) ++activity_;

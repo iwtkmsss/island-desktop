@@ -6,6 +6,11 @@
 #include <QObject>
 #include <QTimer>
 
+#ifdef Q_OS_LINUX
+#include <memory>
+class KWinPointer;
+#endif
+
 class AppState;
 class QQuickWindow;
 class ShellController final : public QObject {
@@ -43,12 +48,19 @@ signals:
     void suppressionChanged();
 private:
     void poll();
+    bool eventFilter(QObject *watched, QEvent *event) override;
+    bool handleDoubleClick(QEvent *event);
+    void updatePassThrough();
     bool gazeTrackingEnabled() const;
     void resetGaze();
     void setSuppressed(bool suppressed);
     void setNativeInputSuppressed(bool suppressed);
     void setClickThrough(bool clickThrough);
     void refreshHoverAfterGeometryChange(bool pressed);
+#ifdef Q_OS_LINUX
+    std::unique_ptr<KWinPointer> desktopPointer_;
+    quint64 lastPointerSerial_ = 0;
+#endif
     AppState *state_;
     QQuickWindow *window_ = nullptr;
     QTimer ticker_;
