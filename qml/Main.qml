@@ -82,9 +82,6 @@ Window {
     Behavior on glowTint { ColorAnimation { duration: root.model.reducedMotion ? 0 : 600 } }
     property real glowLevel: glowActive ? 1 : 0
     Behavior on glowLevel { NumberAnimation { duration: root.model.reducedMotion ? 0 : 450; easing.type: Easing.OutCubic } }
-    // The analyzer already shapes attack/release. Another animation here
-    // delays beats and keeps restarting as each audio frame arrives.
-    property real loudness: flowing ? Math.min(1, audio.level / 0.45) : 0
     property real glowPulse: flowing ? 0.78 + 0.22 * Math.min(1, audio.level * 1.6) : 0.85
     Binding {
         target: root.audio; property: "enabled"
@@ -138,7 +135,7 @@ Window {
                 pointerX: root.interaction.pointerX; pointerY: root.interaction.pointerY
                 proximity: root.interaction.proximity
                 phase: root.wavePhase
-                wave: root.flowing ? 5 + 11 * Math.pow(root.loudness, 0.9) : 0
+                wave: root.flowing ? 13 : 0
                 bands: root.audio.bands
                 glowColor: root.glowTint
                 glowStrength: root.glowLevel * root.glowPulse
@@ -237,14 +234,12 @@ Window {
                                     color: root.colors.secondary; font.pixelSize: 11; elide: Text.ElideRight
                                 }
                             }
-                            ActionButton {
+                            Text {
                                 visible: root.mediaSection && root.media.available && root.model.eventTitle.length === 0
-                                colors: root.colors
-                                iconName: root.media.playing ? "pause" : "play"
-                                hint: root.media.playing ? "Призупинити" : "Відтворити"
-                                enabled: root.media.canToggle && !root.media.busy
-                                onClicked: root.media.togglePlayback()
-                                Layout.preferredWidth: 26; Layout.preferredHeight: 26
+                                text: musicPage.timeLabel(root.media.positionMs) + " / "
+                                    + (root.media.durationMs > 0 ? musicPage.timeLabel(root.media.durationMs) : "—")
+                                color: root.colors.secondary; font.pixelSize: 11
+                                elide: Text.ElideRight
                             }
                             Text {
                                 visible: !root.homeSection && !root.mediaSection && root.model.eventTitle.length === 0
@@ -255,7 +250,6 @@ Window {
                                     : root.model.timerState === "running" ? "Відлік" : root.model.timerState === "paused" ? "Пауза" : root.model.timerState === "finished" ? "Готово" : "Таймер"
                                 color: root.colors.secondary; font.pixelSize: 11
                             }
-                            LineIcon { name: "down"; color: root.colors.secondary; Layout.preferredWidth: 16; Layout.preferredHeight: 16 }
                         }
                     }
                 }

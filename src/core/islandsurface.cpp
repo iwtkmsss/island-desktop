@@ -100,7 +100,7 @@ void IslandSurface::paint(QPainter *painter) {
             // Low frequencies sit on the left and get taller hills than the highs.
             const double shaped = std::pow(magnitude, 1.2) * (1.2 - 0.4 * u);
             const double ripple = 0.72 + 0.28 * std::sin(u * 6 * std::numbers::pi + phase);
-            const double lift = std::min(11.0, wave * kick * envelope * shaped * ripple);
+            const double lift = std::min(13.0, wave * kick * envelope * shaped * ripple);
             if (dockEdge == "bottom") p.ry() -= lift;
             else if (dockEdge == "left") p.rx() += lift;
             else if (dockEdge == "right") p.rx() -= lift;
