@@ -233,9 +233,81 @@ Item {
                 }
             }
         }
+        RowLayout {
+            id: edgeRow
+            y: monitorRow.y + monitorRow.height + 18; width: parent.width; height: 34; spacing: 16
+            Text { text: "Край екрана"; color: page.colors.text; font.pixelSize: 13; Layout.fillWidth: true }
+            ComboBox {
+                id: edgePicker
+                objectName: "dockEdgePicker"
+                Layout.preferredWidth: 276; Layout.preferredHeight: 34
+                model: [{ key: "top", label: "Зверху" }, { key: "bottom", label: "Знизу" },
+                        { key: "left", label: "Ліворуч" }, { key: "right", label: "Праворуч" }]
+                textRole: "label"; valueRole: "key"
+                currentIndex: { for (let i=0; i<model.length; ++i) if (model[i].key === page.monitors.dockEdge) return i; return 0 }
+                onActivated: page.monitors.dockEdge = currentValue
+                Accessible.name: "Край екрана для острівця"
+                background: Rectangle { radius: 8; color: edgePicker.hovered ? page.colors.hover : page.colors.raised; border.color: page.colors.line }
+                contentItem: Text { text: edgePicker.displayText; color: page.colors.text; font.pixelSize: 12; verticalAlignment: Text.AlignVCenter; leftPadding: 12; rightPadding: 32 }
+                indicator: LineIcon { x: edgePicker.width-24; y: 10; width: 14; height: 14; name: "down"; color: page.colors.secondary }
+                delegate: ItemDelegate {
+                    required property var modelData
+                    required property int index
+                    width: edgePicker.width-10; height: 34
+                    contentItem: Text { text: modelData.label; color: page.colors.text; font.pixelSize: 12; verticalAlignment: Text.AlignVCenter }
+                    background: Rectangle { radius: 6; color: highlighted ? page.colors.hover : "transparent" }
+                    highlighted: edgePicker.highlightedIndex === index
+                }
+                popup: Popup {
+                    y: edgePicker.height+5; width: edgePicker.width; padding: 5
+                    implicitHeight: contentItem.contentHeight+10
+                    contentItem: ListView { clip: true; implicitHeight: contentHeight; model: edgePicker.popup.visible ? edgePicker.delegateModel : null; currentIndex: edgePicker.highlightedIndex }
+                    background: Rectangle { radius: 10; color: page.colors.raised; border.color: page.colors.line }
+                }
+            }
+        }
+        RowLayout {
+            id: passThroughRow
+            y: edgeRow.y + edgeRow.height + 18; width: parent.width; spacing: 16
+            Column {
+                Layout.fillWidth: true; spacing: 5
+                Text { text: "Подвійний клік"; color: page.colors.text; font.pixelSize: 13 }
+                Text { text: "Прозорість і пропускання кліків"; color: page.colors.muted; font.pixelSize: 11 }
+            }
+            SpinBox {
+                id: passSeconds
+                objectName: "passThroughSeconds"
+                Layout.preferredWidth: 140; Layout.preferredHeight: 34
+                from: 1; to: 300; editable: true
+                value: page.model.passThroughSeconds
+                onValueModified: page.model.passThroughSeconds = value
+                Accessible.name: "Тривалість прозорості в секундах"
+                leftPadding: 36; rightPadding: 36
+                background: Rectangle { radius: 8; color: page.colors.raised; border.color: passSeconds.activeFocus ? page.colors.secondary : page.colors.line }
+                contentItem: TextInput {
+                    text: passSeconds.textFromValue(passSeconds.value, passSeconds.locale)
+                    color: page.colors.text; font.pixelSize: 13
+                    horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                    readOnly: !passSeconds.editable; validator: passSeconds.validator
+                    inputMethodHints: Qt.ImhDigitsOnly
+                    selectionColor: page.colors.secondary
+                }
+                up.indicator: Rectangle {
+                    x: passSeconds.width-width; width: 32; height: passSeconds.height; radius: 8
+                    color: passSeconds.up.hovered ? page.colors.hover : "transparent"
+                    Text { anchors.centerIn: parent; text: "+"; color: page.colors.text; font.pixelSize: 18 }
+                }
+                down.indicator: Rectangle {
+                    width: 32; height: passSeconds.height; radius: 8
+                    color: passSeconds.down.hovered ? page.colors.hover : "transparent"
+                    Text { anchors.centerIn: parent; text: "−"; color: page.colors.text; font.pixelSize: 18 }
+                }
+            }
+            Text { text: "с"; color: page.colors.secondary; font.pixelSize: 13 }
+        }
         Column {
             id: systemGroup
-            y: monitorRow.y + monitorRow.height + 18
+            y: passThroughRow.y + passThroughRow.implicitHeight + 18
             width: parent.width; spacing: 14
             Rectangle { width: parent.width; height: 1; color: page.colors.line }
             Text { text: "Система"; color: page.colors.secondary; font.pixelSize: 11; font.weight: Font.DemiBold }
@@ -243,12 +315,12 @@ Item {
                 width: parent.width; spacing: 5
                 RowLayout {
                     width: parent.width
-                    Text { text: "Запускати з Windows"; color: page.colors.text; font.pixelSize: 13; Layout.fillWidth: true }
+                    Text { text: "Запускати при вході"; color: page.colors.text; font.pixelSize: 13; Layout.fillWidth: true }
                     Switch {
                         id: startupSwitch
                         enabled: page.startup.available
                         checked: page.startup.enabled
-                        Accessible.name: "Запускати з Windows"
+                        Accessible.name: "Запускати при вході"
                         onToggled: page.startup.enabled = checked
                         opacity: enabled ? 1 : 0.4
                         indicator: Rectangle {

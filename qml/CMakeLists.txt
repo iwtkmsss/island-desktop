@@ -4,11 +4,21 @@
 # implementations in its own folder.
 if(WIN32)
     set(island_platform_dir "${PROJECT_SOURCE_DIR}/src/platform/windows")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(island_platform_dir "${PROJECT_SOURCE_DIR}/src/platform/linux")
+    find_package(LayerShellQt 6.6 REQUIRED)
+    find_package(KF6GlobalAccel REQUIRED)
+    find_package(LibTaskManager REQUIRED)
+    find_package(KF6Service REQUIRED)
+    find_package(KF6IconThemes REQUIRED)
+    find_package(KF6Kirigami REQUIRED)
+    find_package(KF6KIO REQUIRED)
 else()
     message(FATAL_ERROR "No platform backend for ${CMAKE_SYSTEM_NAME} yet: add src/platform/linux.")
 endif()
 qt_add_executable(IslandDesktop WIN32
-    ../src/main.cpp
+    ../src/main.cpp ../src/platform/shellgesture.cpp
+    ../src/platform/desktopcontroller.h "${island_platform_dir}/desktopcontroller.cpp"
     ../src/platform/mediacontroller.h ../src/platform/shellcontroller.h
     ../src/platform/volumecontroller.h ../src/platform/audiocontroller.h
     ../src/platform/startupcontroller.h ../src/platform/hotkeycontroller.h
@@ -21,8 +31,16 @@ qt_add_executable(IslandDesktop WIN32
 target_include_directories(IslandDesktop PRIVATE "${PROJECT_SOURCE_DIR}/src/platform")
 set_target_properties(IslandDesktop PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}")
 target_link_libraries(IslandDesktop PRIVATE island_core Qt6::Quick Qt6::QuickControls2 Qt6::Widgets Qt6::Network)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_sources(IslandDesktop PRIVATE ../src/platform/linux/pulseworker.cpp
+        ../src/platform/linux/kwinpointer.cpp ../src/platform/linux/kwinpointer.h)
+    set_source_files_properties(../src/platform/linux/kwin-pointer.js PROPERTIES QT_RESOURCE_ALIAS kwin-pointer.js)
+    qt_add_resources(IslandDesktop linux_pointer PREFIX "/linux" FILES ../src/platform/linux/kwin-pointer.js)
+    target_link_libraries(IslandDesktop PRIVATE Qt6::DBus PkgConfig::PULSE PkgConfig::XCBSHAPE
+        LayerShellQt::Interface KF6::GlobalAccel KF6::WindowSystem PW::LibTaskManager KF6::Service KF6::KIOGui KF6::IconThemes)
+endif()
 set(island_qml_files)
-foreach(name Main HomePage IslandEyes IslandColors LineIcon ActionButton PlaybackIndicator TimePage ClockPage TimerPage MusicPage SettingsPage SoundSlider AudioMeter HotkeyField DevicesPage)
+foreach(name Main SettingsWindow HomePage DesktopPanel DesktopButton IslandEyes IslandColors LineIcon ActionButton PlaybackIndicator TimePage ClockPage TimerPage MusicPage SettingsPage SoundSlider AudioMeter HotkeyField DevicesPage)
     set(qml_file "${PROJECT_SOURCE_DIR}/qml/${name}.qml")
     set_source_files_properties("${qml_file}" PROPERTIES QT_RESOURCE_ALIAS "${name}.qml")
     list(APPEND island_qml_files "${qml_file}")
@@ -39,8 +57,16 @@ if(MSVC)
 else()
     target_compile_options(IslandDesktop PRIVATE -Wall -Wextra -Wpedantic)
 endif()
-install(TARGETS IslandDesktop RUNTIME DESTINATION . BUNDLE DESTINATION .)
-qt_generate_deploy_qml_app_script(TARGET IslandDesktop OUTPUT_SCRIPT deploy_script NO_UNSUPPORTED_PLATFORM_ERROR)
-install(SCRIPT ${deploy_script})
-install(FILES "${PROJECT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md" DESTINATION .)
-install(FILES "${PROJECT_SOURCE_DIR}/third_party/dynamic-island/LICENSE" DESTINATION licenses/dynamic-island)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    install(TARGETS IslandDesktop RUNTIME DESTINATION bin)
+    install(FILES "${PROJECT_SOURCE_DIR}/share/applications/io.github.iwtkmsss.island-desktop.desktop" DESTINATION share/applications)
+    install(FILES "${PROJECT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md" DESTINATION share/doc/IslandDesktop)
+    install(FILES "${PROJECT_SOURCE_DIR}/third_party/dynamic-island/LICENSE" DESTINATION share/licenses/IslandDesktop)
+else()
+    install(TARGETS IslandDesktop RUNTIME DESTINATION . BUNDLE DESTINATION .)
+    qt_generate_deploy_qml_app_script(TARGET IslandDesktop OUTPUT_SCRIPT deploy_script NO_UNSUPPORTED_PLATFORM_ERROR)
+    install(SCRIPT ${deploy_script})
+    install(FILES "${PROJECT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md" DESTINATION .)
+    install(FILES "${PROJECT_SOURCE_DIR}/third_party/dynamic-island/LICENSE" DESTINATION licenses/dynamic-island)
+
+endif()

@@ -45,7 +45,6 @@ Item {
     property double _quietSince: 0
     property double _nextBlink: 0
     property double _blinkStarted: 0
-    property double _lastTick: 0
 
     function unit(value: real): real {
         return isFinite(value) ? Math.max(0, Math.min(1, value)) : 0
@@ -64,14 +63,12 @@ Item {
         _quietSince = now
         _nextBlink = now + 3800 + Math.random() * 3200
         _blinkStarted = 0
-        _lastTick = now
         sleeping = false
     }
 
-    function step() {
+    function step(frameMs: real) {
         const now = Date.now()
-        const dt = Math.max(1, Math.min(100, now - _lastTick))
-        _lastTick = now
+        const dt = Math.max(0, Math.min(48, frameMs))
         if (attentive || audible)
             _quietSince = now
         sleeping = now - _quietSince >= idleTimeout
@@ -92,7 +89,7 @@ Item {
             openingTarget = 0.10
         }
 
-        const follow = 1 - Math.exp(-dt / 95)
+        const follow = 1 - Math.exp(-dt / 170)
         const eyelid = 1 - Math.exp(-dt / (sleeping ? 240 : 38))
         const energyTarget = audible ? unit(localLevel * 0.8 + bass * 0.2) : 0
         const music = 1 - Math.exp(-dt / (energyTarget > _energy ? 65 : 170))
@@ -103,16 +100,20 @@ Item {
     }
 
     onMotionAllowedChanged: resetMotion()
-    onActivitySerialChanged: if (motionAllowed) { _quietSince = Date.now(); sleeping = false; step() }
-    onAttentiveChanged: if (attentive && motionAllowed) { _quietSince = Date.now(); sleeping = false; step() }
-    onAudibleChanged: if (audible && motionAllowed) { _quietSince = Date.now(); sleeping = false; step() }
+    onActivitySerialChanged: if (motionAllowed) { _quietSince = Date.now(); sleeping = false }
+    onAttentiveChanged: if (attentive && motionAllowed) { _quietSince = Date.now(); sleeping = false }
+    onAudibleChanged: if (audible && motionAllowed) { _quietSince = Date.now(); sleeping = false }
     Component.onCompleted: resetMotion()
 
+    FrameAnimation {
+        id: frames
+        running: eyes.motionAllowed && (!eyes.sleeping || Math.abs(eyes._opening - 0.12) > 0.002 || eyes._energy > 0.002)
+        onTriggered: eyes.step(frameTime * 1000)
+    }
     Timer {
-        interval: eyes.sleeping ? 250 : 33
-        repeat: true
-        running: eyes.motionAllowed
-        onTriggered: eyes.step()
+        interval: 250; repeat: true
+        running: eyes.motionAllowed && eyes.sleeping && !frames.running
+        onTriggered: eyes.step(250)
     }
 
     Repeater {

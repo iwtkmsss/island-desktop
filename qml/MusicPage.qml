@@ -102,9 +102,9 @@ Item {
             ActionButton {
                 colors: page.colors; implicitWidth: 24; implicitHeight: 24
                 iconName: page.soundOff ? "speaker-off" : "speaker"
-                hint: !page.volume.available ? "Немає аудіовиходу Windows"
-                    : page.volume.muted ? "Увімкнути звук Windows"
-                    : page.volume.volume === 0 ? "Гучність Windows: 0%" : "Вимкнути звук Windows"
+                hint: !page.volume.available ? "Немає системного аудіовиходу"
+                    : page.volume.muted ? "Увімкнути системний звук"
+                    : page.volume.volume === 0 ? "Системна гучність: 0%" : "Вимкнути системний звук"
                 enabled: page.volume.available
                 onClicked: page.volume.toggleMute()
             }
@@ -142,13 +142,13 @@ Item {
             Text {
                 width: parent.width; horizontalAlignment: Text.AlignHCenter; textFormat: Text.PlainText; elide: Text.ElideRight
                 visible: page.volume.available
-                text: page.volume.deviceName || "Аудіовихід Windows"
+                text: page.volume.deviceName || "Системний аудіовихід"
                 color: page.colors.secondary; font.pixelSize: 12
             }
             Text {
                 width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
                 visible: !page.volume.available
-                text: page.volume.error || "Немає аудіовиходу Windows. Підключіть навушники або динаміки."
+                text: page.volume.error || "Немає системного аудіовиходу. Підключіть навушники або динаміки."
                 color: page.colors.secondary; font.pixelSize: 12
             }
             Row {
@@ -157,8 +157,8 @@ Item {
                 ActionButton {
                     colors: page.colors; enabled: page.volume.available; selected: page.volume.muted
                     iconName: page.soundOff ? "speaker-off" : "speaker"
-                    hint: !page.volume.available ? "Немає аудіовиходу Windows"
-                        : page.volume.muted ? "Увімкнути звук Windows" : "Вимкнути звук Windows"
+                    hint: !page.volume.available ? "Немає системного аудіовиходу"
+                        : page.volume.muted ? "Увімкнути системний звук" : "Вимкнути системний звук"
                     onClicked: page.volume.toggleMute()
                 }
             }

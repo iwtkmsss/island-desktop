@@ -3,6 +3,7 @@ import QtQuick.Controls
 
 Button {
     id: control
+    property bool islandInteractive: true
     required property QtObject colors
     property string iconName: ""
     property bool primary: false

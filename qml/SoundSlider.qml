@@ -5,7 +5,7 @@ Slider {
     id: control
     required property QtObject volume
     required property QtObject colors
-    property string accessibleLabel: "Гучність Windows"
+    property string accessibleLabel: "Системна гучність"
     from: 0; to: 100; stepSize: 1
     implicitWidth: 180; implicitHeight: 26
     padding: 0
