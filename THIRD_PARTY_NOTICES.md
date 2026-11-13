@@ -23,3 +23,7 @@ Copyright (c) 2026 devcode90. MIT License.
 ## Qt
 
 Використовуються динамічні бібліотеки Qt 6.8.3. Їхні ліцензії й відомості про сторонні компоненти: https://doc.qt.io/qt-6.8/licenses-used-in-qt.html
+
+## KDE Frameworks / Plasma (Linux desktop panel)
+
+The Linux panel links dynamically to KDE's LibTaskManager (TasksModel; Eike Hein and KDE contributors), KService, KIO, KIconThemes and KWindowSystem, and uses the installed Kirigami QML icon component. Their upstream sources and per-file licensing are available at https://invent.kde.org/plasma/plasma-workspace/-/tree/master/libtaskmanager and https://invent.kde.org/frameworks. TasksModel headers specify LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL. No Plasma applet source has been copied into this project. The tray adapter interoperates with StatusNotifierItem and Canonical DBusMenu over D-Bus.
